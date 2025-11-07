@@ -1,6 +1,7 @@
 // Global state
 let designPreferences = {};
 let uploadedImages = [];
+let stagedResults = []; // Store staged images for download
 
 // DOM Elements
 const questionnaireSection = document.getElementById('questionnaire-section');
@@ -182,12 +183,20 @@ function displayResults(results) {
     resultsContainer.classList.add('visible');
     resultsContainer.innerHTML = '';
 
+    // Store results globally for downloads
+    stagedResults = results;
+
     results.forEach((result, index) => {
         const resultItem = document.createElement('div');
         resultItem.className = 'result-item';
 
+        const stagedImageUrl = result.imageUrl || uploadedImages[index].dataUrl;
+
         resultItem.innerHTML = `
-            <img src="${result.imageUrl || uploadedImages[index].dataUrl}" alt="Staged ${uploadedImages[index].name}">
+            <div class="image-container">
+                <img src="${stagedImageUrl}" alt="Staged ${uploadedImages[index].name}" onclick="openImageViewer(${index})" style="cursor: pointer;">
+                <div class="image-overlay">Click to view full size</div>
+            </div>
             <div class="result-content">
                 <h3>${result.roomType || 'Room ' + (index + 1)}</h3>
                 <p><strong>Design Description:</strong></p>
@@ -206,9 +215,61 @@ function displayResults(results) {
 
 function downloadImage(index) {
     const link = document.createElement('a');
-    link.href = uploadedImages[index].dataUrl;
+    // Download the STAGED image, not the original
+    const stagedImageUrl = stagedResults[index]?.imageUrl || uploadedImages[index].dataUrl;
+    link.href = stagedImageUrl;
     link.download = `staged-${uploadedImages[index].name}`;
     link.click();
+}
+
+// Image viewer/lightbox functionality
+function openImageViewer(index) {
+    const stagedImageUrl = stagedResults[index]?.imageUrl || uploadedImages[index].dataUrl;
+    const roomType = stagedResults[index]?.roomType || `Room ${index + 1}`;
+
+    // Create lightbox overlay
+    const lightbox = document.createElement('div');
+    lightbox.className = 'lightbox';
+    lightbox.innerHTML = `
+        <div class="lightbox-content">
+            <button class="lightbox-close" onclick="closeLightbox()">&times;</button>
+            <div class="lightbox-header">
+                <h3>${roomType}</h3>
+                <button class="lightbox-download" onclick="downloadImage(${index})">
+                    Download Image
+                </button>
+            </div>
+            <img src="${stagedImageUrl}" alt="${roomType}">
+            <div class="lightbox-nav">
+                ${index > 0 ? `<button class="lightbox-prev" onclick="navigateLightbox(${index - 1})">&larr; Previous</button>` : '<div></div>'}
+                <span>${index + 1} / ${stagedResults.length}</span>
+                ${index < stagedResults.length - 1 ? `<button class="lightbox-next" onclick="navigateLightbox(${index + 1})">Next &rarr;</button>` : '<div></div>'}
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(lightbox);
+    document.body.style.overflow = 'hidden';
+
+    // Close on background click
+    lightbox.addEventListener('click', (e) => {
+        if (e.target === lightbox) {
+            closeLightbox();
+        }
+    });
+}
+
+function closeLightbox() {
+    const lightbox = document.querySelector('.lightbox');
+    if (lightbox) {
+        lightbox.remove();
+        document.body.style.overflow = 'auto';
+    }
+}
+
+function navigateLightbox(index) {
+    closeLightbox();
+    openImageViewer(index);
 }
 
 function showSection(section) {
@@ -237,6 +298,7 @@ function startOver() {
     // Reset state
     designPreferences = {};
     uploadedImages = [];
+    stagedResults = [];
 
     // Reset form
     questionnaireForm.reset();

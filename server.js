@@ -79,7 +79,8 @@ app.post('/api/generate-staging', async (req, res) => {
         console.log(`Processing ${images.length} images with Gemini AI...`);
 
         const designContext = generateDesignContext(preferences);
-        const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+        const analysisModel = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+        const imageGenModel = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-image' });
 
         const results = [];
 
@@ -126,7 +127,7 @@ RESPOND IN THIS EXACT JSON FORMAT (no markdown, just valid JSON):
     "brief": "one sentence summary for consistency across rooms"
 }`;
 
-                const result = await model.generateContent([
+                const result = await analysisModel.generateContent([
                     prompt,
                     {
                         inlineData: {
@@ -166,6 +167,60 @@ RESPOND IN THIS EXACT JSON FORMAT (no markdown, just valid JSON):
                     };
                 }
 
+                // Generate staged image using Gemini 2.5 Flash Image with EDITING approach
+                console.log(`Generating staged image for ${analysisResult.roomType}...`);
+
+                // Image editing prompt that preserves the original room
+                const imagePrompt = `Using the provided room image, add the following furniture and decor while keeping the walls, floor, windows, ceiling, and lighting EXACTLY the same:
+
+Furniture to Add: ${analysisResult.furniturePieces?.join(', ')}
+Layout: ${analysisResult.furnitureLayout}
+Color Scheme: ${analysisResult.colorScheme} (ensure furniture matches these colors)
+Decor Elements: ${analysisResult.decorElements?.join(', ')}
+Textiles: ${analysisResult.textiles}
+Wall Art: ${analysisResult.artAndWallDecor}
+${analysisResult.plants ? `Plants: ${analysisResult.plants}` : ''}
+
+CRITICAL REQUIREMENTS:
+- Keep the existing room architecture, walls, floor, and windows UNCHANGED
+- Preserve the original lighting and shadows
+- Add furniture that fits naturally in the space with correct proportions
+- Ensure new furniture casts appropriate shadows matching the room's lighting
+- Make it look like a professional real estate listing photo - photorealistic and move-in ready
+- Style: ${preferences.designStyle}
+- The result should look like the SAME room, just furnished`;
+
+                let stagedImageUrl = image.data; // Default to original
+
+                try {
+                    // Pass BOTH the original image AND the editing prompt
+                    const imageGenResult = await imageGenModel.generateContent([
+                        imagePrompt,
+                        {
+                            inlineData: {
+                                mimeType: mimeType,
+                                data: imageBase64
+                            }
+                        }
+                    ]);
+                    const imageResponse = await imageGenResult.response;
+
+                    // Extract the generated image from response
+                    const generatedImage = imageResponse.candidates?.[0]?.content?.parts?.find(
+                        part => part.inlineData
+                    );
+
+                    if (generatedImage?.inlineData) {
+                        stagedImageUrl = `data:${generatedImage.inlineData.mimeType};base64,${generatedImage.inlineData.data}`;
+                        console.log(`✓ Generated staged image for ${analysisResult.roomType}`);
+                    } else {
+                        console.log(`⚠ Could not generate image, using original`);
+                    }
+                } catch (genError) {
+                    console.error(`Error generating image for ${analysisResult.roomType}:`, genError.message);
+                    console.log(`⚠ Using original image instead`);
+                }
+
                 results.push({
                     roomType: analysisResult.roomType,
                     description: analysisResult.description,
@@ -174,12 +229,12 @@ RESPOND IN THIS EXACT JSON FORMAT (no markdown, just valid JSON):
                         `Decor: ${analysisResult.decorElements?.join(', ') || 'Tasteful accessories'}\n` +
                         `Colors: ${analysisResult.colorScheme}\n` +
                         `Textiles: ${analysisResult.textiles}`,
-                    imageUrl: image.data, // In a real implementation, this would be the AI-generated image
+                    imageUrl: stagedImageUrl,
                     details: analysisResult,
                     brief: analysisResult.brief
                 });
 
-                console.log(`✓ Completed analysis for ${analysisResult.roomType}`);
+                console.log(`✓ Completed processing for ${analysisResult.roomType}`);
 
             } catch (imageError) {
                 console.error(`Error processing image ${i + 1}:`, imageError);
