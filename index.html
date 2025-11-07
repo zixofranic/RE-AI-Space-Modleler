@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Virtual Staging - Real Estate</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🏠 AI Virtual Staging for Real Estate</h1>
+            <p class="subtitle">Transform empty spaces into beautifully furnished homes using AI</p>
+        </header>
+
+        <main>
+            <!-- Step 1: Questionnaire -->
+            <section id="questionnaire-section" class="section active">
+                <h2>Step 1: Design Preferences</h2>
+                <p class="section-description">Answer these questions to help us understand your design vision</p>
+
+                <form id="questionnaire-form">
+                    <div class="question">
+                        <label>1. What is the property type?</label>
+                        <select name="propertyType" required>
+                            <option value="">Select...</option>
+                            <option value="apartment">Apartment</option>
+                            <option value="house">House</option>
+                            <option value="condo">Condo</option>
+                            <option value="townhouse">Townhouse</option>
+                            <option value="commercial">Commercial</option>
+                        </select>
+                    </div>
+
+                    <div class="question">
+                        <label>2. Target buyer demographic?</label>
+                        <select name="targetBuyer" required>
+                            <option value="">Select...</option>
+                            <option value="young-professional">Young Professional</option>
+                            <option value="family">Family</option>
+                            <option value="retirees">Retirees</option>
+                            <option value="luxury">Luxury Buyer</option>
+                            <option value="first-time">First-time Buyer</option>
+                        </select>
+                    </div>
+
+                    <div class="question">
+                        <label>3. Preferred design style?</label>
+                        <select name="designStyle" required>
+                            <option value="">Select...</option>
+                            <option value="modern">Modern</option>
+                            <option value="contemporary">Contemporary</option>
+                            <option value="traditional">Traditional</option>
+                            <option value="scandinavian">Scandinavian</option>
+                            <option value="minimalist">Minimalist</option>
+                            <option value="industrial">Industrial</option>
+                            <option value="bohemian">Bohemian</option>
+                            <option value="mid-century">Mid-Century Modern</option>
+                        </select>
+                    </div>
+
+                    <div class="question">
+                        <label>4. Primary color palette?</label>
+                        <select name="colorPalette" required>
+                            <option value="">Select...</option>
+                            <option value="neutral-whites">Neutral Whites & Beiges</option>
+                            <option value="warm-earth">Warm Earth Tones</option>
+                            <option value="cool-grays">Cool Grays & Blues</option>
+                            <option value="bold-accents">Bold Accent Colors</option>
+                            <option value="monochrome">Monochrome</option>
+                            <option value="pastels">Soft Pastels</option>
+                        </select>
+                    </div>
+
+                    <div class="question">
+                        <label>5. Wood finish preference?</label>
+                        <select name="woodFinish" required>
+                            <option value="">Select...</option>
+                            <option value="light-oak">Light Oak</option>
+                            <option value="walnut">Walnut</option>
+                            <option value="white-wash">White Wash</option>
+                            <option value="dark-espresso">Dark Espresso</option>
+                            <option value="natural">Natural Wood</option>
+                        </select>
+                    </div>
+
+                    <div class="question">
+                        <label>6. Metal accents preference?</label>
+                        <select name="metalAccents" required>
+                            <option value="">Select...</option>
+                            <option value="brass">Brass/Gold</option>
+                            <option value="chrome">Chrome/Silver</option>
+                            <option value="black">Matte Black</option>
+                            <option value="copper">Copper/Rose Gold</option>
+                            <option value="mixed">Mixed Metals</option>
+                        </select>
+                    </div>
+
+                    <div class="question">
+                        <label>7. Furniture style preference?</label>
+                        <select name="furnitureStyle" required>
+                            <option value="">Select...</option>
+                            <option value="sleek-modern">Sleek & Modern</option>
+                            <option value="cozy-comfortable">Cozy & Comfortable</option>
+                            <option value="elegant-formal">Elegant & Formal</option>
+                            <option value="casual-relaxed">Casual & Relaxed</option>
+                            <option value="statement-pieces">Statement Pieces</option>
+                        </select>
+                    </div>
+
+                    <div class="question">
+                        <label>8. Desired atmosphere?</label>
+                        <select name="atmosphere" required>
+                            <option value="">Select...</option>
+                            <option value="bright-airy">Bright & Airy</option>
+                            <option value="warm-cozy">Warm & Cozy</option>
+                            <option value="sophisticated">Sophisticated</option>
+                            <option value="relaxed-casual">Relaxed & Casual</option>
+                            <option value="luxurious">Luxurious</option>
+                        </select>
+                    </div>
+
+                    <div class="question">
+                        <label>9. Lighting preference?</label>
+                        <select name="lighting" required>
+                            <option value="">Select...</option>
+                            <option value="natural-abundant">Natural & Abundant</option>
+                            <option value="warm-ambient">Warm Ambient</option>
+                            <option value="modern-fixtures">Modern Statement Fixtures</option>
+                            <option value="layered">Layered Lighting</option>
+                            <option value="minimalist">Minimalist</option>
+                        </select>
+                    </div>
+
+                    <div class="question">
+                        <label>10. Wall decor preference?</label>
+                        <select name="wallDecor" required>
+                            <option value="">Select...</option>
+                            <option value="artwork">Large Artwork</option>
+                            <option value="gallery-wall">Gallery Wall</option>
+                            <option value="minimal">Minimal/None</option>
+                            <option value="mirrors">Mirrors</option>
+                            <option value="shelving">Decorative Shelving</option>
+                        </select>
+                    </div>
+
+                    <div class="question">
+                        <label>11. Flooring type?</label>
+                        <select name="flooring" required>
+                            <option value="">Select...</option>
+                            <option value="hardwood">Hardwood</option>
+                            <option value="tile">Tile</option>
+                            <option value="carpet">Carpet</option>
+                            <option value="laminate">Laminate</option>
+                            <option value="concrete">Concrete</option>
+                        </select>
+                    </div>
+
+                    <div class="question">
+                        <label>12. Rug preference?</label>
+                        <select name="rugStyle" required>
+                            <option value="">Select...</option>
+                            <option value="large-statement">Large Statement Rug</option>
+                            <option value="neutral-texture">Neutral Textured</option>
+                            <option value="patterned">Patterned/Bold</option>
+                            <option value="layered">Layered Rugs</option>
+                            <option value="none">No Rugs</option>
+                        </select>
+                    </div>
+
+                    <div class="question">
+                        <label>13. Window treatment style?</label>
+                        <select name="windowTreatments" required>
+                            <option value="">Select...</option>
+                            <option value="sheer-curtains">Sheer Curtains</option>
+                            <option value="heavy-drapes">Heavy Drapes</option>
+                            <option value="blinds">Modern Blinds</option>
+                            <option value="minimal">Minimal/None</option>
+                            <option value="roman-shades">Roman Shades</option>
+                        </select>
+                    </div>
+
+                    <div class="question">
+                        <label>14. Plant/greenery preference?</label>
+                        <select name="greenery" required>
+                            <option value="">Select...</option>
+                            <option value="abundant">Abundant Plants</option>
+                            <option value="minimal">Minimal/Accent Plants</option>
+                            <option value="none">No Plants</option>
+                            <option value="large-statement">Large Statement Plants</option>
+                            <option value="natural">Natural/Organic Feel</option>
+                        </select>
+                    </div>
+
+                    <div class="question">
+                        <label>15. Texture preference?</label>
+                        <select name="texture" required>
+                            <option value="">Select...</option>
+                            <option value="smooth-sleek">Smooth & Sleek</option>
+                            <option value="layered-cozy">Layered & Cozy</option>
+                            <option value="natural-organic">Natural & Organic</option>
+                            <option value="mixed-textures">Mixed Textures</option>
+                            <option value="minimal">Minimal Texture</option>
+                        </select>
+                    </div>
+
+                    <div class="question">
+                        <label>16. Seating arrangement preference?</label>
+                        <select name="seating" required>
+                            <option value="">Select...</option>
+                            <option value="conversation">Conversation-focused</option>
+                            <option value="tv-centric">TV-centric</option>
+                            <option value="open-flow">Open Flow</option>
+                            <option value="formal">Formal Arrangement</option>
+                            <option value="casual-flexible">Casual & Flexible</option>
+                        </select>
+                    </div>
+
+                    <div class="question">
+                        <label>17. Storage/organizational visibility?</label>
+                        <select name="storage" required>
+                            <option value="">Select...</option>
+                            <option value="hidden">Hidden/Built-in</option>
+                            <option value="open-shelving">Open Shelving</option>
+                            <option value="mixed">Mixed Approach</option>
+                            <option value="minimal">Minimal Storage Visible</option>
+                            <option value="decorative">Decorative Storage</option>
+                        </select>
+                    </div>
+
+                    <div class="question">
+                        <label>18. Accent pillow/throw style?</label>
+                        <select name="accents" required>
+                            <option value="">Select...</option>
+                            <option value="matching">Matching Set</option>
+                            <option value="eclectic">Eclectic Mix</option>
+                            <option value="minimal">Minimal Accents</option>
+                            <option value="bold-patterns">Bold Patterns</option>
+                            <option value="textured">Textured Neutrals</option>
+                        </select>
+                    </div>
+
+                    <div class="question">
+                        <label>19. Price point appearance?</label>
+                        <select name="pricePoint" required>
+                            <option value="">Select...</option>
+                            <option value="luxury-high-end">Luxury/High-End</option>
+                            <option value="mid-range-quality">Mid-Range Quality</option>
+                            <option value="budget-friendly">Budget-Friendly</option>
+                            <option value="investment">Investment Pieces</option>
+                            <option value="value">Great Value</option>
+                        </select>
+                    </div>
+
+                    <div class="question">
+                        <label>20. Overall design consistency?</label>
+                        <select name="consistency" required>
+                            <option value="">Select...</option>
+                            <option value="very-cohesive">Very Cohesive/Matching</option>
+                            <option value="coordinated">Coordinated but Varied</option>
+                            <option value="eclectic-curated">Eclectic but Curated</option>
+                            <option value="room-specific">Room-Specific Styles</option>
+                            <option value="flexible">Flexible/Adaptable</option>
+                        </select>
+                    </div>
+
+                    <button type="submit" class="btn-primary">Next: Upload Images</button>
+                </form>
+            </section>
+
+            <!-- Step 2: Image Upload -->
+            <section id="upload-section" class="section">
+                <h2>Step 2: Upload Empty Room Photos</h2>
+                <p class="section-description">Upload photos of the empty rooms you want to stage</p>
+
+                <div class="upload-area" id="upload-area">
+                    <div class="upload-icon">📸</div>
+                    <p>Drag and drop images here or click to browse</p>
+                    <input type="file" id="image-input" accept="image/*" multiple style="display: none;">
+                    <button type="button" class="btn-secondary" onclick="document.getElementById('image-input').click()">
+                        Choose Files
+                    </button>
+                </div>
+
+                <div id="image-preview" class="image-preview"></div>
+
+                <div class="button-group">
+                    <button type="button" class="btn-secondary" onclick="goBack()">Back</button>
+                    <button type="button" class="btn-primary" id="generate-btn" disabled>Generate Staged Images</button>
+                </div>
+            </section>
+
+            <!-- Step 3: Results -->
+            <section id="results-section" class="section">
+                <h2>Step 3: Your Virtually Staged Photos</h2>
+                <p class="section-description">AI-generated furniture and design suggestions</p>
+
+                <div id="loading" class="loading">
+                    <div class="spinner"></div>
+                    <p>AI is analyzing your photos and creating stunning designs...</p>
+                    <p class="loading-detail">This may take a few moments</p>
+                </div>
+
+                <div id="results-container" class="results-container"></div>
+
+                <div class="button-group">
+                    <button type="button" class="btn-secondary" onclick="startOver()">Start Over</button>
+                    <button type="button" class="btn-primary" id="download-all-btn">Download All</button>
+                </div>
+            </section>
+        </main>
+
+        <footer>
+            <p>Powered by Google Gemini AI | © 2024 Virtual Staging AI</p>
+        </footer>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
