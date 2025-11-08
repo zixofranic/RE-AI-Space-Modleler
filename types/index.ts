@@ -16,9 +16,12 @@ export interface RoomAnalysis {
   imageId: string;
   projectId?: string;
   roomType: string;
-  confidence: number;
+  confidence?: number;
   features: string[];
   dimensions?: any;
+  lighting?: string;
+  flooring?: string;
+  windows?: number;
   suggestedPreset?: string;
   spatialInfo?: {
     estimatedDimensions?: { width?: number; length?: number; height?: number };
