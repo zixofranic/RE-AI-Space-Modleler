@@ -49,9 +49,9 @@ export interface RoomAnalysis {
 
 export interface RoomGroup {
   id: string;
-  type: string;
-  images: string[];
-  confidence: number;
+  imageIds: string[];
+  roomType: string;
+  primaryImageId: string;
 }
 
 export interface RoomStagingConfig {
