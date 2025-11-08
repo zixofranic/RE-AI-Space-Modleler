@@ -60,6 +60,14 @@ export interface DesignSettings {
   wallDecor?: string;
   windowTreatments?: string;
   accents?: string;
+  // Expert mode additional fields
+  seating?: string;
+  storage?: string;
+  texture?: string;
+  lighting?: string;
+  consistency?: string;
+  pricePoint?: string;
+  customPromptOverride?: string;
 }
 
 export interface LayerResult {
