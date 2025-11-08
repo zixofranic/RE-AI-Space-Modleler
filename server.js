@@ -171,7 +171,7 @@ RESPOND IN THIS EXACT JSON FORMAT (no markdown, just valid JSON):
                 console.log(`Generating staged image for ${analysisResult.roomType}...`);
 
                 // Image editing prompt that preserves the original room
-                const imagePrompt = `Using the provided room image, add the following furniture and decor while keeping the walls, floor, windows, ceiling, and lighting EXACTLY the same:
+                const imagePrompt = `Using the provided room image, add the following furniture and decor while keeping ALL EXISTING ELEMENTS EXACTLY the same:
 
 Furniture to Add: ${analysisResult.furniturePieces?.join(', ')}
 Layout: ${analysisResult.furnitureLayout}
@@ -181,14 +181,17 @@ Textiles: ${analysisResult.textiles}
 Wall Art: ${analysisResult.artAndWallDecor}
 ${analysisResult.plants ? `Plants: ${analysisResult.plants}` : ''}
 
-CRITICAL REQUIREMENTS:
-- Keep the existing room architecture, walls, floor, and windows UNCHANGED
-- Preserve the original lighting and shadows
-- Add furniture that fits naturally in the space with correct proportions
+CRITICAL REQUIREMENTS - PRESERVE EVERYTHING THAT EXISTS:
+- Keep ALL existing room architecture completely UNCHANGED: walls, floor, windows, ceiling, doors, trim, molding
+- Preserve ALL existing fixtures: kitchen cabinets, islands, countertops, appliances, bathroom vanities, built-ins, shelving
+- Keep the original lighting, light fixtures, and shadows EXACTLY as they are
+- DO NOT remove, modify, or replace ANY existing elements in the room
+- ONLY ADD new furniture and decor items to EMPTY floor space
+- Add furniture that fits naturally in the available space with correct proportions
 - Ensure new furniture casts appropriate shadows matching the room's lighting
 - Make it look like a professional real estate listing photo - photorealistic and move-in ready
 - Style: ${preferences.designStyle}
-- The result should look like the SAME room, just furnished`;
+- The result should look like the SAME EXACT room with the SAME EXACT fixtures, just with added furniture in empty areas`;
 
                 let stagedImageUrl = image.data; // Default to original
 
