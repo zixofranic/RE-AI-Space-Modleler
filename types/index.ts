@@ -28,6 +28,23 @@ export interface RoomAnalysis {
     viewpoint?: string;
     naturalLight?: string;
   };
+  // Advanced analysis fields
+  detailedLighting?: {
+    naturalLightDirection?: string;
+    existingFixtures?: string[];
+    overallQuality?: string;
+  };
+  wallInfo?: {
+    color?: string;
+    finish?: string;
+    condition?: string;
+  };
+  connections?: {
+    likelyConnectedRooms?: string[];
+    openFloorPlan?: boolean;
+  };
+  spatialFingerprint?: string;
+  signatureFeatures?: string[];
 }
 
 export interface RoomGroup {
