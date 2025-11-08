@@ -61,3 +61,10 @@ Thumbs.db
 # Temporary files
 tmp/
 temp/
+
+# Next.js
+.next/
+out/
+
+# Old subdirectory (deprecated)
+ai-staging-app/

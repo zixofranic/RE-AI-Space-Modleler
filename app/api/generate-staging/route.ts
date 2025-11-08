@@ -1,0 +1,862 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { GoogleGenerativeAI } from '@google/generative-ai';
+import { dataUrlToBase64, getMimeType } from '@/lib/utils';
+import type { RoomStagingConfig, RoomAnalysis, DesignSettings, ProjectStyleGuide } from '@/types';
+
+export const maxDuration = 60;
+
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
+
+interface GenerateRequest {
+  imageId: string;
+  imageDataUrl: string;
+  config: RoomStagingConfig;
+  analysis: RoomAnalysis;
+  globalSettings?: Partial<DesignSettings>;
+  projectStyleGuide?: ProjectStyleGuide; // "Seed & Lock" style guide
+}
+
+/**
+ * Generate floor mask for inpainting
+ * This mask tells Gemini EXACTLY which pixels it can edit (white) vs preserve (black)
+ */
+async function generateFloorMask(imageBase64: string, mimeType: string): Promise<string | null> {
+  try {
+    const model = genAI.getGenerativeModel({
+      model: 'gemini-2.5-flash-image'
+    });
+
+    const maskPrompt = `
+Create a binary segmentation mask for this room image.
+
+OUTPUT REQUIREMENTS:
+- Return a black and white image with EXACT same dimensions as input
+- WHITE (#FFFFFF): Floor area only - this is where furniture will be added
+- BLACK (#000000): Everything else - walls, ceiling, windows, doors, fixtures, moldings
+
+Be precise:
+- Include the entire floor surface in white
+- Keep baseboards, door frames, window frames in black
+- If there's a rug visible, include it as part of the floor (white)
+
+This mask will be used for inpainting - white areas will be edited, black areas will be preserved.
+`;
+
+    const result = await model.generateContent({
+      contents: [{
+        role: 'user',
+        parts: [
+          { text: maskPrompt },
+          {
+            inlineData: {
+              mimeType,
+              data: imageBase64,
+            },
+          },
+        ],
+      }],
+    });
+
+    const response = await result.response;
+    const candidates = response.candidates;
+
+    if (candidates && candidates.length > 0 && candidates[0].content) {
+      const parts = candidates[0].content.parts;
+      const imagePart = parts.find((part: any) => part.inlineData);
+
+      if (imagePart && imagePart.inlineData) {
+        console.log('✅ Floor mask generated successfully');
+        return imagePart.inlineData.data; // Return base64 mask
+      }
+    }
+
+    console.warn('⚠️ No mask generated, proceeding without mask');
+    return null;
+  } catch (error) {
+    console.error('❌ Error generating mask:', error);
+    return null;
+  }
+}
+
+/**
+ * Apply ambient occlusion post-processing
+ * Enhances contact shadows under furniture and on rugs for more realistic depth
+ */
+async function applyAmbientOcclusion(stagedImageBase64: string, mimeType: string): Promise<string> {
+  try {
+    const model = genAI.getGenerativeModel({
+      model: 'gemini-2.5-flash-image'
+    });
+
+    const aoPrompt = `
+Apply ambient occlusion post-processing to this staged room image.
+
+TASK: Enhance the contact shadows and ambient lighting for maximum realism.
+
+Focus on:
+1. CONTACT SHADOWS (Most Important):
+   - Darken where furniture legs/bases touch the floor
+   - Darken where furniture sits on rugs
+   - Add subtle darkening under sofas, beds, tables, chairs
+   - These should be dark, soft-edged pools of shadow
+
+2. CREVICE DARKENING:
+   - Darken corners where furniture meets walls
+   - Darken under cushions and pillows
+   - Darken inside shelving units
+
+3. AMBIENT OCCLUSION:
+   - Add subtle darkening in areas where light doesn't reach easily
+   - Under table edges, behind furniture
+   - In corners and recessed areas
+
+CRITICAL RULES:
+- DO NOT change the furniture, layout, or room architecture
+- ONLY enhance shadows and lighting
+- Keep changes subtle and realistic
+- Match the existing lighting direction
+- Preserve all colors and materials
+
+Return the image with enhanced ambient occlusion and contact shadows.
+`;
+
+    const result = await model.generateContent({
+      contents: [{
+        role: 'user',
+        parts: [
+          { text: aoPrompt },
+          {
+            inlineData: {
+              mimeType,
+              data: stagedImageBase64,
+            },
+          },
+        ],
+      }],
+    });
+
+    const response = await result.response;
+    const candidates = response.candidates;
+
+    if (candidates && candidates.length > 0 && candidates[0].content) {
+      const parts = candidates[0].content.parts;
+      const imagePart = parts.find((part: any) => part.inlineData);
+
+      if (imagePart && imagePart.inlineData) {
+        console.log('✅ Ambient occlusion applied successfully');
+        return imagePart.inlineData.data;
+      }
+    }
+
+    console.warn('⚠️ Ambient occlusion failed, returning original');
+    return stagedImageBase64;
+  } catch (error) {
+    console.error('❌ Error applying ambient occlusion:', error);
+    return stagedImageBase64;
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const body: GenerateRequest = await request.json();
+
+    if (!body.imageDataUrl || !body.config) {
+      return NextResponse.json(
+        { error: 'Missing required fields' },
+        { status: 400 }
+      );
+    }
+
+    // Use Gemini 2.5 Flash Image for actual image generation
+    const model = genAI.getGenerativeModel({
+      model: 'gemini-2.5-flash-image'
+    });
+
+    const imageBase64 = await dataUrlToBase64(body.imageDataUrl);
+    const mimeType = getMimeType(body.imageDataUrl);
+
+    // ============================================================================
+    // STEP 1: Generate floor mask for inpainting
+    // ============================================================================
+    console.log('🎭 Step 1: Generating floor mask...');
+    const maskBase64 = await generateFloorMask(imageBase64, mimeType);
+
+    // Merge settings with global settings
+    const settings = {
+      ...body.globalSettings,
+      ...body.config.settings,
+    };
+
+    // ============================================================================
+    // STEP 2: Build SIMPLIFIED inpainting prompt
+    // ============================================================================
+    // The mask handles preservation - prompt only needs to DIRECT the furniture placement
+    console.log('📝 Step 2: Building inpainting prompt...');
+
+    const layer2 = buildDimensionalLayer(body.analysis.roomType);
+    const layer3 = buildFunctionalZoningLayer(body.analysis.roomType);
+
+    // Build style guide section if available
+    const styleGuideSection = body.projectStyleGuide
+      ? `
+--- PROJECT STYLE GUIDE (MUST FOLLOW FOR CONSISTENCY) ---
+- PRIMARY WOOD: ${body.projectStyleGuide.primaryWood}
+${body.projectStyleGuide.secondaryWood ? `- SECONDARY WOOD: ${body.projectStyleGuide.secondaryWood}` : ''}
+- PRIMARY METAL: ${body.projectStyleGuide.primaryMetal}
+${body.projectStyleGuide.accentMetal ? `- ACCENT METAL: ${body.projectStyleGuide.accentMetal}` : ''}
+- PRIMARY FABRIC: ${body.projectStyleGuide.primaryFabric}
+${body.projectStyleGuide.accentFabric ? `- ACCENT FABRIC: ${body.projectStyleGuide.accentFabric}` : ''}
+${body.projectStyleGuide.rugPattern ? `- RUG PATTERN: ${body.projectStyleGuide.rugPattern}` : ''}
+${body.projectStyleGuide.greeneryType ? `- GREENERY: ${body.projectStyleGuide.greeneryType}` : ''}
+`
+      : '';
+
+    const inpaintingPrompt = maskBase64
+      ? `You are a professional virtual staging AI.
+
+TASK: Fill the white-masked area of the original image with staged furniture.
+All black-masked areas MUST remain 100% identical to the original image.
+
+--- STAGING INSTRUCTIONS ---
+- ROOM: ${body.analysis.roomType}
+${settings.customAdditions ? `- CUSTOM REQUESTS: ${settings.customAdditions}` : ''}
+
+--- PRESET CONSTRAINTS (MUST FOLLOW) ---
+- DESIGN STYLE: ${settings.designStyle || 'Modern Contemporary'}
+- COLOR PALETTE: ${settings.colorPalette || 'Neutral tones'}
+- WOOD FINISH: ${settings.woodFinish || 'Natural wood tones'}
+- METAL ACCENTS: ${settings.metalAccents || 'Brushed nickel'}
+- FURNITURE STYLE: ${settings.furnitureStyle || 'Contemporary pieces'}
+- RUG STYLE: ${settings.rugStyle || 'Neutral area rug'}
+- GREENERY: ${settings.greenery || 'Minimal plants'}
+${styleGuideSection}
+${layer2}
+${layer3}
+
+--- LIGHTING & SHADOWS ---
+- Match all perspective, lighting, and shadow from the original image
+- Add realistic contact and cast shadows
+- Ensure furniture integrates naturally with existing room lighting
+
+The mask defines the editable area. Focus on creating beautiful, realistic staging within that area.
+`
+      : // Fallback to old prompt if no mask
+        `
+🎯 TASK: Using the provided image, add furniture and staging to THIS EXACT room.
+
+⚠️ PRESERVATION REQUIREMENTS (ABSOLUTE):
+• Keep the room architecture EXACTLY as shown
+• Preserve ALL walls, floors, ceilings, windows, doors, moldings
+• Maintain EXACT room dimensions and layout
+• Keep original lighting and shadows
+• Do NOT change wall colors, flooring, or structural elements
+
+--- STAGING INSTRUCTIONS ---
+- ROOM: ${body.analysis.roomType}
+${settings.customAdditions ? `- CUSTOM REQUESTS: ${settings.customAdditions}` : ''}
+
+--- PRESET CONSTRAINTS (MUST FOLLOW) ---
+- DESIGN STYLE: ${settings.designStyle || 'Modern Contemporary'}
+- COLOR PALETTE: ${settings.colorPalette || 'Neutral tones'}
+- WOOD FINISH: ${settings.woodFinish || 'Natural wood tones'}
+- METAL ACCENTS: ${settings.metalAccents || 'Brushed nickel'}
+- FURNITURE STYLE: ${settings.furnitureStyle || 'Contemporary pieces'}
+- RUG STYLE: ${settings.rugStyle || 'Neutral area rug'}
+- GREENERY: ${settings.greenery || 'Minimal plants'}
+${styleGuideSection}
+${layer2}
+${layer3}
+
+Add furniture with realistic shadows. This is IMAGE EDITING - add elements, don't regenerate the room.
+`;
+
+    // ============================================================================
+    // STEP 3: Inpainting API call (3 parts if mask available, 2 parts otherwise)
+    // ============================================================================
+    console.log('🎨 Step 3: Generating staged image with inpainting...');
+
+    const parts: any[] = [
+      { text: inpaintingPrompt },
+      {
+        inlineData: {
+          mimeType,
+          data: imageBase64,
+        },
+      },
+    ];
+
+    // Add mask as third part if available (enables inpainting mode)
+    if (maskBase64) {
+      console.log('✅ Using mask-based inpainting (3-part API call)');
+      parts.push({
+        inlineData: {
+          mimeType: 'image/png',
+          data: maskBase64,
+        },
+      });
+    } else {
+      console.log('⚠️ No mask available, using standard generation (2-part API call)');
+    }
+
+    const result = await model.generateContent({
+      contents: [
+        {
+          role: 'user',
+          parts,
+        },
+      ],
+    });
+
+    const response = await result.response;
+
+    // Check if response contains generated image
+    const candidates = response.candidates;
+    let stagedImageUrl = body.imageDataUrl; // Fallback to original
+
+    if (candidates && candidates.length > 0 && candidates[0].content) {
+      const parts = candidates[0].content.parts;
+
+      // Look for inline data (generated image)
+      const imagePart = parts.find((part: any) => part.inlineData);
+
+      if (imagePart && imagePart.inlineData) {
+        // Convert generated image to data URL
+        const generatedMimeType = imagePart.inlineData.mimeType || 'image/jpeg';
+        let generatedData = imagePart.inlineData.data;
+
+        // ============================================================================
+        // STEP 4: Apply ambient occlusion post-processing
+        // ============================================================================
+        console.log('🌑 Step 4: Applying ambient occlusion for enhanced shadows...');
+        try {
+          generatedData = await applyAmbientOcclusion(generatedData, generatedMimeType);
+        } catch (aoError) {
+          console.warn('⚠️ Ambient occlusion failed, using original staged image:', aoError);
+          // Continue with original staged image
+        }
+
+        // Return data URL - the store's setStagingResult will handle Supabase upload
+        stagedImageUrl = `data:${generatedMimeType};base64,${generatedData}`;
+      }
+    }
+
+    // Also get text description if available
+    let description = `Professionally staged ${body.analysis.roomType} with ${settings.designStyle || 'modern'} design.`;
+    let suggestions = '';
+
+    try {
+      const textContent = response.text();
+      if (textContent) {
+        // Try to parse as JSON for structured data
+        const cleanText = textContent.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+        const parsed = JSON.parse(cleanText);
+        description = parsed.description || description;
+        suggestions = parsed.suggestions || '';
+      }
+    } catch {
+      // If not JSON, use the text as-is
+      const textContent = response.text();
+      if (textContent && textContent.length < 500) {
+        description = textContent;
+      }
+    }
+
+    const stagingResult = {
+      imageId: body.imageId,
+      roomType: body.analysis.roomType,
+      description,
+      suggestions: suggestions || `Staged with ${settings.designStyle || 'modern'} furniture and ${settings.colorPalette || 'neutral'} color palette.`,
+      stagedImageUrl, // Now contains the actual generated image!
+      details: {
+        furniturePieces: [],
+        colorScheme: settings.colorPalette || '',
+        decorElements: [],
+        furnitureLayout: '',
+        textiles: settings.rugStyle || '',
+      },
+    };
+
+    // ============================================================================
+    // SAVE TO DATABASE
+    // ============================================================================
+    try {
+      console.log('🔍 Starting database save...');
+      const { saveProject, saveImage, saveStagingResult } = await import('@/lib/database');
+      const projectId = body.analysis.projectId || 'default';
+      console.log(`🔍 Project ID from analysis: ${projectId}`);
+
+      // 1. Ensure project exists in database
+      console.log('🔍 Saving project...');
+      await saveProject(projectId, {
+        name: `Project ${new Date().toLocaleDateString()}`,
+        settings: settings,
+        metadata: {
+          lastGeneratedAt: new Date().toISOString(),
+        }
+      });
+      console.log(`✅ Project saved to database: ${projectId}`);
+
+      // 2. Ensure original image exists in database
+      if (body.imageDataUrl) {
+        await saveImage({
+          id: body.imageId,
+          projectId: projectId,
+          originalUrl: body.imageDataUrl, // This should be the Supabase URL
+          analysis: body.analysis,
+          metadata: {
+            uploadedAt: new Date().toISOString(),
+          }
+        });
+        console.log(`✅ Image saved to database: ${body.imageId}`);
+      }
+
+      // 3. Save staging result to database
+      const resultId = `result-${body.imageId}-${Date.now()}`;
+      await saveStagingResult({
+        id: resultId,
+        imageId: body.imageId,
+        projectId: projectId,
+        stagedUrl: stagedImageUrl,
+        config: body.config,
+        description: description,
+        suggestions: suggestions || `Staged with ${settings.designStyle || 'modern'} furniture and ${settings.colorPalette || 'neutral'} color palette.`,
+        details: {
+          furniturePieces: [],
+          colorScheme: settings.colorPalette || '',
+          decorElements: [],
+          furnitureLayout: '',
+          textiles: settings.rugStyle || '',
+        }
+      });
+      console.log(`✅ Staging result saved to database: ${resultId}`);
+    } catch (dbError) {
+      console.error('❌❌❌ DATABASE SAVE FAILED ❌❌❌');
+      console.error('Error details:', dbError);
+      console.error('Error message:', dbError instanceof Error ? dbError.message : String(dbError));
+      console.error('Error stack:', dbError instanceof Error ? dbError.stack : 'No stack trace');
+      // Don't fail the request if database save fails
+      // The image is already uploaded to storage, so user can still see results
+    }
+
+    return NextResponse.json(stagingResult);
+
+  } catch (error) {
+    console.error('❌ Staging generation error:', error);
+
+    // Log detailed error info
+    if (error instanceof Error) {
+      console.error('Error message:', error.message);
+      console.error('Error stack:', error.stack);
+    }
+
+    // Check if it's a Gemini API error
+    if (typeof error === 'object' && error !== null && 'response' in error) {
+      console.error('Gemini API response:', JSON.stringify(error, null, 2));
+    }
+
+    return NextResponse.json(
+      {
+        error: error instanceof Error ? error.message : 'Generation failed',
+        details: error instanceof Error ? error.stack : String(error)
+      },
+      { status: 500 }
+    );
+  }
+}
+
+// Simplified lighting hint - just the direction, not the academic physics
+function buildSimpleLightingHint(analysis: RoomAnalysis | undefined): string {
+  const windowCount = analysis?.windows || 0;
+
+  if (windowCount > 0) {
+    return `- Light Source: ${windowCount} window${windowCount > 1 ? 's' : ''} - observe window position(s) in image, cast shadows away from windows`;
+  } else {
+    return `- Light Source: Artificial ceiling lighting - observe existing room shadows for direction`;
+  }
+}
+
+// ============================================================================
+// LAYER 1: SPATIAL FOUNDATION - Doors, Windows, Pathways
+// ============================================================================
+function buildSpatialFoundationLayer(analysis: RoomAnalysis): string {
+  const features = analysis.features || [];
+  const windows = analysis.windows || 0;
+
+  // Detect doorways from features
+  const doorFeatures = features.filter(f =>
+    f.toLowerCase().includes('door') ||
+    f.toLowerCase().includes('entry') ||
+    f.toLowerCase().includes('archway')
+  );
+
+  // Detect windows
+  const windowInfo = windows > 0
+    ? `\n🪟 WINDOWS:\n- Count: ${windows} window(s)\n- Location: Visible in image\n- CRITICAL RULE: Do NOT place tall furniture in front of windows\n- PRESERVE: Natural light pathways and window views`
+    : '';
+
+  // Detect pathways
+  const pathwayInfo = doorFeatures.length > 0
+    ? `\n🚶 TRAFFIC PATHWAYS:\n- Clear pathways required from doors to main areas\n- Minimum width: 36 inches (3 feet)\n- CRITICAL RULE: These zones MUST remain completely clear of furniture`
+    : '\n🚶 TRAFFIC PATHWAYS:\n- Assume entry point at one wall\n- Maintain 36" clear pathway to center of room';
+
+  return `
+==============================================
+LAYER 1: SPATIAL FOUNDATION (HIGHEST PRIORITY)
+==============================================
+
+${analysis.roomType.toUpperCase()} - ${analysis.dimensions?.width ? `${analysis.dimensions.width}' × ${analysis.dimensions.height}'` : 'Standard residential size'}
+
+🚪 DOORS & OPENINGS:
+${doorFeatures.length > 0
+  ? doorFeatures.map(f => `- ${f}\n  → FORBIDDEN ZONE: 36" (3 feet) clearance in front\n  → RULE: NO furniture within this zone`).join('\n')
+  : `- Assume 1-2 doorways exist (standard for ${analysis.roomType})\n  → FORBIDDEN ZONE: 36" clearance in front of all doors\n  → RULE: Identify door locations in image and keep clear`
+}
+${windowInfo}${pathwayInfo}
+
+🏗️ STRUCTURAL ELEMENTS TO PRESERVE:
+${features.length > 0
+  ? features.filter(f => !f.toLowerCase().includes('door')).map(f => `- ${f} (DO NOT MODIFY)`).join('\n')
+  : '- All walls, ceilings, floors (DO NOT MODIFY)\n- Any built-in features visible in image'
+}
+
+🚨 CRITICAL SPATIAL RULES:
+✓ All doorways, archways, and passages must have 36" minimum clearance
+✓ Windows must NOT be blocked by furniture
+✓ Traffic paths must be clear and unobstructed
+✓ Identify these zones in the image FIRST before placing any furniture
+`;
+}
+
+// ============================================================================
+// LAYER 2: DIMENSIONAL CONSTRAINTS - Furniture Sizing
+// ============================================================================
+function buildDimensionalLayer(roomType: string): string {
+  const dimensions: Record<string, string> = {
+    'Living Room': `
+Living Room Furniture - EXACT SIZES:
+• Standard Sofa: 84"W × 36"D × 32"H (7 feet wide MAX)
+• Loveseat: 58"W × 36"D (5 feet wide)
+• Armchair: 32"W × 34"D (under 3 feet)
+• Coffee Table: 48"W × 24"D × 18"H (4 feet long, LOW height)
+• Side Table: 20"W × 20"D × 24"H (2 feet square)
+• Media Console: 60"W × 18"D × 24"H
+• Area Rug: 8'×10' or 9'×12' (front legs of furniture ON rug)
+
+Clearance Requirements:
+• 18" between coffee table and sofa
+• 30" walking paths around furniture
+• TV viewing distance: 7-10 feet from seating`,
+
+    'Bedroom': `
+Bedroom Furniture - EXACT SIZES:
+• Queen Bed: 60"W × 80"L (headboard MUST be against wall)
+• King Bed: 76"W × 80"L (only for large rooms >12'×12')
+• Nightstand: 24"W × 18"D × 24-28"H (one on each side)
+• Dresser: 60"W × 18"D × 32"H (against wall, not blocking closet)
+• Bench (foot of bed): 48"W × 18"D × 18"H (optional)
+
+Clearance Requirements:
+• 24" minimum on sides of bed (30" preferred)
+• 36" at foot of bed for walking
+• 36" in front of dresser for drawer opening`,
+
+    'Dining Room': `
+Dining Room Furniture - EXACT SIZES:
+• 4-Person Table: 42"W × 42"L (round or square)
+• 6-Person Table: 72"W × 36"W (rectangular)
+• 8-Person Table: 84"W × 40"W (rectangular)
+• Dining Chair: 18"W × 20"D × 36"H total (18" seat height)
+• Buffet/Sideboard: 60"W × 18"D × 36"H (against wall)
+
+Clearance Requirements:
+• 36" from table edge to wall (minimum)
+• 42" from table edge to wall (preferred for chair pullout)
+• 24" between chair centers
+• Chandelier: 30-36" above table surface`,
+
+    'Home Office': `
+Home Office Furniture - EXACT SIZES:
+• Desk: 60"W × 30"D × 29"H (standard height)
+• Office Chair: 24"W × 24"D (with casters)
+• Bookshelf: 36"W × 12"D × 72"H (against wall)
+• Filing Cabinet: 15"W × 24"D × 28"H (beside or under desk)
+
+Clearance Requirements:
+• 36" behind chair for pullout/movement
+• 30" in front of bookcases
+• Desk should face window OR wall (not door)`,
+
+    'Kitchen': `
+Kitchen Furniture - EXACT SIZES:
+• Kitchen Island: 36-42"W × 24"D × 36"H (if space allows)
+• Bar Stool: 16"W × 16"D × 30" seat height
+• Kitchen Table (small): 30"W × 48"L
+• Dining Chair: 18"W × 20"D
+
+Clearance Requirements:
+• 42" walkways around island
+• 36" between counters (galley kitchen)
+• 15" landing space beside appliances`
+  };
+
+  const roomKey = Object.keys(dimensions).find(key =>
+    roomType.toLowerCase().includes(key.toLowerCase())
+  );
+
+  return `
+==============================================
+LAYER 2: DIMENSIONAL CONSTRAINTS
+==============================================
+
+${roomKey ? dimensions[roomKey] : dimensions['Living Room']}
+
+⚠️ SIZING RULES:
+• Furniture should occupy 50-60% of floor space (NOT more)
+• Leave negative space - rooms should NOT feel cramped
+• Scale furniture to room size - bigger rooms can handle bigger furniture
+• When in doubt, go SMALLER rather than larger
+
+📐 PROPORTIONS:
+• Art above sofa: 2/3 to 3/4 width of sofa
+• Rug: Should extend 12-18" beyond furniture edges
+• Coffee table: 2/3 length of sofa
+`;
+}
+
+// ============================================================================
+// LAYER 3: FUNCTIONAL ZONING - Room-Specific Layout Rules
+// ============================================================================
+function buildFunctionalZoningLayer(roomType: string): string {
+  const zones: Record<string, string> = {
+    'Living Room': `
+PRIMARY ZONE - Conversation/TV Viewing:
+• Seating arrangement in U-shape or L-shape
+• All seating faces focal point (TV, fireplace, or window view)
+• Max 10 feet between facing seats
+• Coffee table in center, accessible from all seats
+
+SECONDARY ZONE - Circulation:
+• Clear path from entry to seating area
+• No furniture blocking traffic flow
+• Walking path AROUND seating group (not through)
+
+ACCENT ELEMENTS:
+• Floor lamp beside reading chair
+• Side tables within arm's reach of seating
+• Plants in corners or beside windows
+• Bookshelf or console against wall`,
+
+    'Bedroom': `
+PRIMARY ZONE - Sleep:
+• Bed headboard against longest solid wall
+• NOT under window (disrupts sleep)
+• Symmetrical nightstands on both sides
+• Sight line to door from bed (security)
+
+SECONDARY ZONE - Dressing:
+• Dresser against wall, not blocking closet
+• Mirror above dresser or on wall
+• Hamper in closet or corner
+
+OPTIONAL ZONES:
+• Reading nook: Corner chair + floor lamp + side table
+• Workspace: Small desk facing window
+• Seating area: Two chairs + small table (if room >12'×14')`,
+
+    'Dining Room': `
+PRIMARY ZONE - Dining:
+• Table centered in room OR under chandelier
+• Equal space on all sides for chair pullout (36-42")
+• Chairs evenly spaced around table
+
+SECONDARY ZONE - Storage/Display:
+• Buffet or sideboard against wall
+• Bar cart in corner
+• China cabinet against wall
+
+FLOW:
+• Clear path from kitchen (if adjacent)
+• Clear path from living area
+• No furniture blocking doorways`,
+
+    'Home Office': `
+PRIMARY ZONE - Workspace:
+• Desk placement: Facing window (natural light) OR facing wall (focus)
+• NOT with back to door (creates discomfort)
+• Desk centered on wall OR in corner
+
+SECONDARY ZONE - Storage:
+• Bookshelf behind or beside desk
+• Filing cabinet beside or under desk
+• Storage ottoman or cabinet
+
+ERGONOMICS:
+• Monitor at arm's length, top at eye level
+• Chair should roll on floor or rug pad
+• Task lighting on desk`,
+
+    'Kitchen': `
+FUNCTIONAL LAYOUT:
+• Work Triangle: Sink ↔ Stove ↔ Refrigerator
+• Total triangle: 12-26 feet ideal
+• No appliance obstructed
+
+SEATING (if space):
+• Island with bar stools (42" clearance behind stools)
+• Small table in breakfast nook
+• Minimum 36" clearance around table
+
+STORAGE:
+• Open shelving on walls
+• Pot rack above island
+• Wine rack or cart in corner`
+  };
+
+  const roomKey = Object.keys(zones).find(key =>
+    roomType.toLowerCase().includes(key.toLowerCase())
+  );
+
+  return `
+==============================================
+LAYER 3: FUNCTIONAL ZONING
+==============================================
+
+${roomKey ? zones[roomKey] : zones['Living Room']}
+`;
+}
+
+// ============================================================================
+// LAYER 4: STYLE CONSISTENCY - Design Language Rules
+// ============================================================================
+function buildStyleLayer(settings: Partial<DesignSettings>): string {
+  const style = settings.designStyle || 'Contemporary';
+  const colorPalette = settings.colorPalette || 'Neutral tones';
+
+  return `
+==============================================
+LAYER 4: STYLE CONSISTENCY
+==============================================
+
+DESIGN STYLE: ${style}
+${getStyleGuidelines(style)}
+
+COLOR PALETTE: ${colorPalette}
+• 60% Dominant color: ${colorPalette.split(',')[0] || 'Neutral base'}
+• 30% Secondary: Upholstery, curtains, rug
+• 10% Accent: Pillows, art, accessories
+
+MATERIAL CONSISTENCY:
+${settings.woodFinish ? `• Wood Finish: ${settings.woodFinish} (use ONLY this wood tone)` : ''}
+${settings.metalAccents ? `• Metal Accents: ${settings.metalAccents} (use ONLY this metal finish)` : ''}
+${settings.flooring ? `• Flooring Style: ${settings.flooring}` : ''}
+
+DECOR ELEMENTS:
+${settings.wallDecor ? `• Wall Decor: ${settings.wallDecor}` : '• Wall Decor: 1-2 pieces of art, not overcrowded'}
+${settings.rugStyle ? `• Rug: ${settings.rugStyle}` : '• Rug: Matches color palette, appropriate size'}
+${settings.windowTreatments ? `• Windows: ${settings.windowTreatments}` : '• Windows: Simple treatments or bare'}
+${settings.greenery ? `• Plants: ${settings.greenery}` : '• Plants: 1-2 medium-sized plants'}
+${settings.accents ? `• Accents: ${settings.accents}` : '• Accents: Minimal, purposeful'}
+
+🎨 PATTERN MIXING RULES:
+• Maximum 3 patterns in room
+• Vary scale: One large, one medium, one small
+• Share at least one color across all patterns
+`;
+}
+
+function getStyleGuidelines(style: string): string {
+  const guidelines: Record<string, string> = {
+    'modern': '• Clean lines, minimal ornamentation\n• Low-profile furniture\n• Glass, metal, leather materials\n• Geometric shapes\n• Avoid: Ornate details, heavy drapery',
+    'contemporary': '• Current, updated look\n• Mix of textures\n• Neutral with color pops\n• Curved and straight lines\n• Avoid: Too matchy-matchy',
+    'traditional': '• Classic furniture with details\n• Warm, rich colors\n• Wood furniture (mahogany, cherry)\n• Symmetrical arrangements\n• Avoid: Ultra-modern pieces',
+    'transitional': '• Blend of traditional + modern\n• Neutral palette with texture\n• Clean-lined traditional furniture\n• Mix of materials\n• Avoid: Extremes of either style',
+    'scandinavian': '• Light, airy feel\n• White/light gray base\n• Natural wood (light tones)\n• Minimal decor\n• Avoid: Dark, heavy furniture',
+    'industrial': '• Exposed materials (brick, metal)\n• Reclaimed wood\n• Vintage Edison lighting\n• Raw, unfinished look\n• Avoid: Overly polished pieces',
+    'bohemian': '• Layered textiles\n• Mix of patterns\n• Global-inspired pieces\n• Plants and natural elements\n• Avoid: Matchy sets',
+    'minimalist': '• Only essential furniture\n• Neutral colors\n• Hidden storage\n• Clean surfaces\n• Avoid: Clutter, excess decor'
+  };
+
+  for (const [key, value] of Object.entries(guidelines)) {
+    if (style.toLowerCase().includes(key)) {
+      return value;
+    }
+  }
+
+  return guidelines['contemporary'];
+}
+
+// ============================================================================
+// LAYER 5: TECHNICAL REFINEMENT - Shadows, Physics, Realism
+// ============================================================================
+function buildTechnicalLayer(analysis: RoomAnalysis): string {
+  const lightingHint = analysis.windows && analysis.windows > 0
+    ? `Natural light from ${analysis.windows} window(s)`
+    : 'Artificial ceiling lighting';
+
+  return `
+==============================================
+LAYER 5: TECHNICAL REFINEMENT
+==============================================
+
+LIGHTING ANALYSIS:
+• Source: ${lightingHint}
+• Rule: Analyze existing shadows in the image to determine light direction
+• All added furniture MUST match this shadow direction
+
+🌑 SHADOW REQUIREMENTS (CRITICAL FOR REALISM):
+
+Every piece of furniture MUST have these 3 shadow types:
+
+1. CONTACT SHADOW (Most Important):
+   - Dark shadow where furniture touches floor
+   - Darkest at exact contact point (legs, base)
+   - Prevents "floating" appearance
+   - This is what makes furniture look real vs. pasted
+
+2. CAST SHADOW (Directional):
+   - Soft shadow extending away from light source
+   - Match direction of existing shadows in room
+   - Lighter and softer than contact shadow
+   - Length varies by distance from light
+
+3. FORM SHADOW (Depth):
+   - Darker side of furniture away from light
+   - Crevice darkening where parts meet
+   - Under cushions, behind furniture
+   - Creates three-dimensional appearance
+
+Shadow Quality:
+• Near windows: Softer, lighter shadows
+• Away from windows: Sharper, darker shadows
+• ALL furniture must cast consistent shadow direction
+• Shadows should look natural, not artificial
+
+⚖️ PHYSICS & REALISM:
+
+GRAVITY:
+• All furniture must appear grounded (not floating)
+• Heavy items (sofas, tables) sit firmly on floor
+• Contact shadows reinforce weight
+
+MATERIALS:
+• Fabrics drape naturally (curtains, throw blankets)
+• Cushions show slight compression when "sat on"
+• Rugs lie flat with realistic edges/corners
+• Wood has natural grain and slight variations
+
+LIGHTING BEHAVIOR:
+• Surfaces facing light source are brighter
+• Surfaces away from light are darker
+• Reflective surfaces (glass, metal) show highlights
+• Matte surfaces (fabric, wood) diffuse light
+
+🔍 FINAL VALIDATION:
+
+Before completing, verify:
+✓ No furniture appears to "hover" - all have contact shadows
+✓ Shadow directions are consistent across ALL elements
+✓ Materials look realistic (wood grain, fabric texture)
+✓ Lighting matches the original room
+✓ Nothing looks "pasted on" - everything integrates naturally
+`;
+}
