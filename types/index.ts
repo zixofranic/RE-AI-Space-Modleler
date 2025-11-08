@@ -42,6 +42,7 @@ export interface RoomStagingConfig {
   mode?: DesignMode;
   preset?: string;
   settings?: DesignSettings;
+  useLayeredGeneration?: boolean;
 }
 
 export interface DesignSettings {
