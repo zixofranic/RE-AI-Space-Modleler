@@ -54,6 +54,11 @@ export interface DesignSettings {
   furnitureStyle?: string;
   rugStyle?: string;
   greenery?: string;
+  atmosphere?: string;
+  flooring?: string;
+  wallDecor?: string;
+  windowTreatments?: string;
+  accents?: string;
 }
 
 export interface StagingResult {
