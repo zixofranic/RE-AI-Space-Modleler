@@ -14,9 +14,11 @@ export interface UploadedImage {
 
 export interface RoomAnalysis {
   imageId: string;
+  projectId?: string;
   roomType: string;
   confidence: number;
   features: string[];
+  dimensions?: any;
   suggestedPreset?: string;
   spatialInfo?: {
     estimatedDimensions?: { width?: number; length?: number; height?: number };
