@@ -61,6 +61,15 @@ export interface DesignSettings {
   accents?: string;
 }
 
+export interface LayerResult {
+  layerNumber: number;
+  layerName: string;
+  imageUrl: string;
+  metadata?: any;
+  success: boolean;
+  error?: string;
+}
+
 export interface StagingResult {
   imageId: string;
   roomType: string;
@@ -68,7 +77,7 @@ export interface StagingResult {
   suggestions: string;
   stagedImageUrl: string;
   details?: any;
-  layers?: any[];
+  layers?: LayerResult[];
   isLayered?: boolean;
 }
 
