@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useStore } from '@/lib/store';
 import { ArrowLeft, Download, Edit } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { PhotoViewer } from '@/components/ui/photo-viewer';
 import { MAX_VERSIONS_PER_IMAGE } from '@/types';
 
 export default function ProjectDetailPage() {
@@ -23,6 +24,9 @@ export default function ProjectDetailPage() {
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
+  const [photoViewerOpen, setPhotoViewerOpen] = useState(false);
+  const [viewerImages, setViewerImages] = useState<string[]>([]);
+  const [viewerIndex, setViewerIndex] = useState(0);
 
   useEffect(() => {
     async function load() {
@@ -41,6 +45,11 @@ export default function ProjectDetailPage() {
   const handleContinueEditing = (imageId: string) => {
     setStep('results');
     router.push('/');
+  };
+  const openPhotoViewer = (images: string[], startIndex: number) => {
+    setViewerImages(images);
+    setViewerIndex(startIndex);
+    setPhotoViewerOpen(true);
   };
 
   const handleDownloadVersion = async (imageUrl: string, imageName: string, versionNum: number) => {
@@ -108,12 +117,13 @@ export default function ProjectDetailPage() {
           {uploadedImages.map((image) => {
             const versions = stagingResults[image.id] || [];
             const canEdit = versions.length < MAX_VERSIONS_PER_IMAGE;
+            const allImages = [image.dataUrl, ...versions.map(v => v.stagedImageUrl!)];
 
             return (
               <div key={image.id} className="bg-white rounded-xl shadow-lg overflow-hidden">
                 <div className="p-6 border-b border-gray-200">
                   <div className="flex items-center gap-4">
-                    <img src={image.dataUrl} alt="Original" className="w-32 h-32 object-cover rounded-lg" />
+                    <img src={image.dataUrl} alt="Original" className="w-32 h-32 object-cover rounded-lg cursor-pointer hover:opacity-80 transition-opacity" onClick={() => openPhotoViewer(allImages, 0)} />
                     <div className="flex-1">
                       <h3 className="text-lg font-semibold text-gray-900">Original Image</h3>
                       <p className="text-sm text-gray-600">{image.name}</p>
@@ -156,5 +166,11 @@ export default function ProjectDetailPage() {
         </div>
       </div>
     </div>
+      <PhotoViewer
+        isOpen={photoViewerOpen}
+        onClose={() => setPhotoViewerOpen(false)}
+        images={viewerImages}
+        initialIndex={viewerIndex}
+      />
   );
 }
