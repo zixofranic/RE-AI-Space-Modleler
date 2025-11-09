@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { dataUrlToBase64, getMimeType } from '@/lib/utils';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import type { RoomStagingConfig, RoomAnalysis, DesignSettings, ProjectStyleGuide } from '@/types';
 
 export const maxDuration = 60;
@@ -20,7 +21,7 @@ interface GenerateRequest {
  * Generate floor mask for inpainting
  * This mask tells Gemini EXACTLY which pixels it can edit (white) vs preserve (black)
  */
-async function generateFloorMask(imageBase64: string, mimeType: string): Promise<string | null> {
+async function generateFloorMask(imageBase64: string, mimeType: string, imageId: string, projectId?: string): Promise<string> {
   try {
     const model = genAI.getGenerativeModel({
       model: 'gemini-2.5-flash-image'
@@ -31,15 +32,41 @@ Create a binary segmentation mask for this room image.
 
 OUTPUT REQUIREMENTS:
 - Return a black and white image with EXACT same dimensions as input
-- WHITE (#FFFFFF): Floor area only - this is where furniture will be added
-- BLACK (#000000): Everything else - walls, ceiling, windows, doors, fixtures, moldings
+- WHITE (#FFFFFF): Available floor area for furniture placement
+- BLACK (#000000): Everything that must be preserved
 
-Be precise:
-- Include the entire floor surface in white
-- Keep baseboards, door frames, window frames in black
-- If there's a rug visible, include it as part of the floor (white)
+CRITICAL - Mark as BLACK (preserved):
+1. ARCHITECTURAL ELEMENTS:
+   - All walls, ceiling, and ceiling fixtures (fans, lights, chandeliers)
+   - All windows and window frames
+   - ALL doors (open or closed) and door frames - paint the ENTIRE door black
+   - Door trim, baseboards, crown molding, chair rails
+   - Built-in features (closets, shelves, radiators)
+   - Electrical outlets, switches, vents, thermostats
 
-This mask will be used for inpainting - white areas will be edited, black areas will be preserved.
+2. PATHWAYS & CIRCULATION (CRITICAL FOR USABILITY):
+   - Floor area directly in front of ALL doors (minimum 36 inches / 3 feet clearance)
+   - Walking paths between doors and room entrances
+   - Natural circulation routes through the room
+   - Entry/exit zones and thresholds
+
+3. SAFETY ZONES:
+   - Do NOT block access to any door
+   - Do NOT block windows (24" clearance)
+   - Maintain clear paths for egress
+
+Mark as WHITE (editable for furniture):
+- Only the central floor area suitable for furniture
+- Areas that are NOT within 3 feet of any door
+- Areas that are NOT in natural walking paths between doors
+- Open floor space away from architectural features
+
+SPECIAL ATTENTION:
+- In rooms with multiple doors, ensure clear paths between them remain unobstructed
+- If unsure whether an area is a pathway, mark it BLACK (preserve it)
+- Better to have too much black than too much white
+
+This mask will be used for inpainting - white areas will be edited, black areas will be preserved exactly.
 `;
 
     const result = await model.generateContent({
@@ -65,94 +92,37 @@ This mask will be used for inpainting - white areas will be edited, black areas 
       const imagePart = parts.find((part: any) => part.inlineData);
 
       if (imagePart && imagePart.inlineData) {
+        const maskData = imagePart.inlineData.data;
         console.log('✅ Floor mask generated successfully');
-        return imagePart.inlineData.data; // Return base64 mask
+
+        // DEBUG: Save mask to Supabase for inspection
+        if (isSupabaseConfigured() && projectId) {
+          try {
+            const maskBlob = new Blob([
+              Uint8Array.from(atob(maskData), c => c.charCodeAt(0))
+            ], { type: 'image/png' });
+
+            const debugPath = `${projectId}/debug/mask_${imageId}_${Date.now()}.png`;
+            await supabase.storage
+              .from('staged-images')
+              .upload(debugPath, maskBlob, { upsert: true });
+
+            console.log(`🐛 DEBUG: Mask saved to staged-images/${debugPath}`);
+          } catch (debugError) {
+            console.warn('⚠️ Could not save debug mask:', debugError);
+          }
+        }
+
+        return maskData; // Return base64 mask
       }
     }
 
-    console.warn('⚠️ No mask generated, proceeding without mask');
-    return null;
+    // NO FALLBACK - Throw error instead of returning null
+    throw new Error('Mask generation failed: No mask image returned from Gemini');
+
   } catch (error) {
     console.error('❌ Error generating mask:', error);
-    return null;
-  }
-}
-
-/**
- * Apply ambient occlusion post-processing
- * Enhances contact shadows under furniture and on rugs for more realistic depth
- */
-async function applyAmbientOcclusion(stagedImageBase64: string, mimeType: string): Promise<string> {
-  try {
-    const model = genAI.getGenerativeModel({
-      model: 'gemini-2.5-flash-image'
-    });
-
-    const aoPrompt = `
-Apply ambient occlusion post-processing to this staged room image.
-
-TASK: Enhance the contact shadows and ambient lighting for maximum realism.
-
-Focus on:
-1. CONTACT SHADOWS (Most Important):
-   - Darken where furniture legs/bases touch the floor
-   - Darken where furniture sits on rugs
-   - Add subtle darkening under sofas, beds, tables, chairs
-   - These should be dark, soft-edged pools of shadow
-
-2. CREVICE DARKENING:
-   - Darken corners where furniture meets walls
-   - Darken under cushions and pillows
-   - Darken inside shelving units
-
-3. AMBIENT OCCLUSION:
-   - Add subtle darkening in areas where light doesn't reach easily
-   - Under table edges, behind furniture
-   - In corners and recessed areas
-
-CRITICAL RULES:
-- DO NOT change the furniture, layout, or room architecture
-- ONLY enhance shadows and lighting
-- Keep changes subtle and realistic
-- Match the existing lighting direction
-- Preserve all colors and materials
-
-Return the image with enhanced ambient occlusion and contact shadows.
-`;
-
-    const result = await model.generateContent({
-      contents: [{
-        role: 'user',
-        parts: [
-          { text: aoPrompt },
-          {
-            inlineData: {
-              mimeType,
-              data: stagedImageBase64,
-            },
-          },
-        ],
-      }],
-    });
-
-    const response = await result.response;
-    const candidates = response.candidates;
-
-    if (candidates && candidates.length > 0 && candidates[0].content) {
-      const parts = candidates[0].content.parts;
-      const imagePart = parts.find((part: any) => part.inlineData);
-
-      if (imagePart && imagePart.inlineData) {
-        console.log('✅ Ambient occlusion applied successfully');
-        return imagePart.inlineData.data;
-      }
-    }
-
-    console.warn('⚠️ Ambient occlusion failed, returning original');
-    return stagedImageBase64;
-  } catch (error) {
-    console.error('❌ Error applying ambient occlusion:', error);
-    return stagedImageBase64;
+    throw new Error(`Mask generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
 
@@ -179,7 +149,7 @@ export async function POST(request: NextRequest) {
     // STEP 1: Generate floor mask for inpainting
     // ============================================================================
     console.log('🎭 Step 1: Generating floor mask...');
-    const maskBase64 = await generateFloorMask(imageBase64, mimeType);
+    const maskBase64 = await generateFloorMask(imageBase64, mimeType, body.imageId, body.analysis.projectId);
 
     // Merge settings with global settings
     const settings = {
@@ -188,9 +158,8 @@ export async function POST(request: NextRequest) {
     };
 
     // ============================================================================
-    // STEP 2: Build SIMPLIFIED inpainting prompt
+    // STEP 2: Build inpainting prompt with integrated shadow instructions
     // ============================================================================
-    // The mask handles preservation - prompt only needs to DIRECT the furniture placement
     console.log('📝 Step 2: Building inpainting prompt...');
 
     const layer2 = buildDimensionalLayer(body.analysis.roomType);
@@ -211,8 +180,7 @@ ${body.projectStyleGuide.greeneryType ? `- GREENERY: ${body.projectStyleGuide.gr
 `
       : '';
 
-    const inpaintingPrompt = maskBase64
-      ? `You are a professional virtual staging AI.
+    const inpaintingPrompt = `You are a professional virtual staging AI.
 
 TASK: Fill the white-masked area of the original image with staged furniture.
 All black-masked areas MUST remain 100% identical to the original image.
@@ -233,47 +201,35 @@ ${styleGuideSection}
 ${layer2}
 ${layer3}
 
---- LIGHTING & SHADOWS ---
-- Match all perspective, lighting, and shadow from the original image
-- Add realistic contact and cast shadows
-- Ensure furniture integrates naturally with existing room lighting
+--- LIGHTING & SHADOWS (CRITICAL FOR REALISM) ---
+Match all perspective, lighting, and shadow from the original image.
 
-The mask defines the editable area. Focus on creating beautiful, realistic staging within that area.
-`
-      : // Fallback to old prompt if no mask
-        `
-🎯 TASK: Using the provided image, add furniture and staging to THIS EXACT room.
+Every piece of furniture MUST have these 3 shadow types:
 
-⚠️ PRESERVATION REQUIREMENTS (ABSOLUTE):
-• Keep the room architecture EXACTLY as shown
-• Preserve ALL walls, floors, ceilings, windows, doors, moldings
-• Maintain EXACT room dimensions and layout
-• Keep original lighting and shadows
-• Do NOT change wall colors, flooring, or structural elements
+1. CONTACT SHADOW (Most Important):
+   - Dark, soft shadow where furniture touches the floor/rug
+   - This prevents the "floating" appearance
+   - Must be directly under furniture legs/bases
+   - Soft-edged, dark pools of shadow
 
---- STAGING INSTRUCTIONS ---
-- ROOM: ${body.analysis.roomType}
-${settings.customAdditions ? `- CUSTOM REQUESTS: ${settings.customAdditions}` : ''}
+2. CAST SHADOW (Directional):
+   - Soft shadow extending away from the light source
+   - Must match the direction of existing shadows in the room
+   - Follow the natural light from windows
 
---- PRESET CONSTRAINTS (MUST FOLLOW) ---
-- DESIGN STYLE: ${settings.designStyle || 'Modern Contemporary'}
-- COLOR PALETTE: ${settings.colorPalette || 'Neutral tones'}
-- WOOD FINISH: ${settings.woodFinish || 'Natural wood tones'}
-- METAL ACCENTS: ${settings.metalAccents || 'Brushed nickel'}
-- FURNITURE STYLE: ${settings.furnitureStyle || 'Contemporary pieces'}
-- RUG STYLE: ${settings.rugStyle || 'Neutral area rug'}
-- GREENERY: ${settings.greenery || 'Minimal plants'}
-${styleGuideSection}
-${layer2}
-${layer3}
+3. AMBIENT OCCLUSION (Depth):
+   - Subtle darkening in crevices and corners
+   - Darken under cushions and where furniture meets walls
+   - Add depth under tables, behind furniture
+   - Darken inside shelving units
 
-Add furniture with realistic shadows. This is IMAGE EDITING - add elements, don't regenerate the room.
+The mask defines the editable area. Focus on creating beautiful, realistic staging with hyper-realistic shadows integrated into the scene.
 `;
 
     // ============================================================================
-    // STEP 3: Inpainting API call (3 parts if mask available, 2 parts otherwise)
+    // STEP 3: Inpainting API call (ALWAYS 3-part with mask)
     // ============================================================================
-    console.log('🎨 Step 3: Generating staged image with inpainting...');
+    console.log('🎨 Step 3: Generating staged image with mask-based inpainting...');
 
     const parts: any[] = [
       { text: inpaintingPrompt },
@@ -283,20 +239,13 @@ Add furniture with realistic shadows. This is IMAGE EDITING - add elements, don'
           data: imageBase64,
         },
       },
-    ];
-
-    // Add mask as third part if available (enables inpainting mode)
-    if (maskBase64) {
-      console.log('✅ Using mask-based inpainting (3-part API call)');
-      parts.push({
+      {
         inlineData: {
           mimeType: 'image/png',
           data: maskBase64,
         },
-      });
-    } else {
-      console.log('⚠️ No mask available, using standard generation (2-part API call)');
-    }
+      },
+    ];
 
     const result = await model.generateContent({
       contents: [
@@ -322,21 +271,11 @@ Add furniture with realistic shadows. This is IMAGE EDITING - add elements, don'
       if (imagePart && imagePart.inlineData) {
         // Convert generated image to data URL
         const generatedMimeType = imagePart.inlineData.mimeType || 'image/jpeg';
-        let generatedData = imagePart.inlineData.data;
-
-        // ============================================================================
-        // STEP 4: Apply ambient occlusion post-processing
-        // ============================================================================
-        console.log('🌑 Step 4: Applying ambient occlusion for enhanced shadows...');
-        try {
-          generatedData = await applyAmbientOcclusion(generatedData, generatedMimeType);
-        } catch (aoError) {
-          console.warn('⚠️ Ambient occlusion failed, using original staged image:', aoError);
-          // Continue with original staged image
-        }
+        const generatedData = imagePart.inlineData.data;
 
         // Return data URL - the store's setStagingResult will handle Supabase upload
         stagedImageUrl = `data:${generatedMimeType};base64,${generatedData}`;
+        console.log('✅ Staged image generated successfully with realistic shadows');
       }
     }
 
