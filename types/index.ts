@@ -61,6 +61,7 @@ export interface RoomStagingConfig {
   preset?: string;
   settings?: DesignSettings;
   useLayeredGeneration?: boolean;
+  seed?: number;
 }
 
 export interface DesignSettings {
