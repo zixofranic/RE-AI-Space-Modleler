@@ -111,6 +111,14 @@ export interface StagingResult {
 
 export type DesignMode = 'preset' | 'guided' | 'expert';
 
+export interface PresetStyle {
+  id: string;
+  name: string;
+  description: string;
+  thumbnail: string;
+  settings: DesignSettings;
+}
+
 export interface Property {
   id: string;
   name: string;
