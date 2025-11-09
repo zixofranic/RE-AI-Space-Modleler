@@ -9,7 +9,14 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 
 export function CustomizeView() {
-  const { selectedMode, applySettingsToAllRooms, uploadedImages, roomAnalyses } = useStore();
+  const {
+    selectedMode,
+    applySettingsToAllRooms,
+    uploadedImages,
+    roomAnalyses,
+    enableSpatialConsistency,
+    toggleSpatialConsistency,
+  } = useStore();
   const [customRequests, setCustomRequests] = useState('');
 
   const handleCustomRequestsChange = (value: string) => {
@@ -63,6 +70,49 @@ export function CustomizeView() {
       {/* Scrollable Content */}
       <div className={uploadedImages.length > 0 ? "lg:col-span-2" : "lg:col-span-3"}>
         <div className="space-y-8">
+          {/* Experimental Features Toggle */}
+          {uploadedImages.length > 1 && (
+            <div className="bg-gradient-to-r from-purple-50 to-indigo-50 rounded-2xl border-2 border-purple-300 p-6">
+              <div className="flex items-start justify-between">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-2">
+                    <h3 className="text-lg font-bold text-gray-900">
+                      🧪 Spatial Consistency (Experimental)
+                    </h3>
+                    <span className="px-2 py-1 bg-purple-600 text-white text-xs font-semibold rounded-full">
+                      BETA
+                    </span>
+                  </div>
+                  <p className="text-sm text-gray-900 mb-2">
+                    When enabled, the AI will try to maintain consistent furniture scale and style across multiple images of the same space.
+                  </p>
+                  <p className="text-xs text-gray-700">
+                    <strong>How it works:</strong> The first image establishes furniture dimensions and style. Subsequent images use this as reference to maintain consistency.
+                  </p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer ml-4">
+                  <input
+                    type="checkbox"
+                    checked={enableSpatialConsistency || false}
+                    onChange={(e) => toggleSpatialConsistency(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-14 h-7 bg-gray-300 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-purple-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:start-[4px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-purple-600"></div>
+                  <span className="ml-3 text-sm font-bold text-gray-900">
+                    {enableSpatialConsistency ? 'ON' : 'OFF'}
+                  </span>
+                </label>
+              </div>
+              {enableSpatialConsistency && (
+                <div className="mt-4 p-3 bg-white rounded-lg border border-purple-200">
+                  <p className="text-xs text-gray-900 font-medium">
+                    ✓ Active: First image will set the style guide. Subsequent images will maintain consistency.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
       {/* Preset Selector */}
       {selectedMode === 'preset' && (
         <>

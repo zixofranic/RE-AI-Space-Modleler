@@ -52,6 +52,9 @@ interface AppActions {
   // Room selection
   selectRoom: (roomId: string) => void;
 
+  // Experimental Features
+  toggleSpatialConsistency: (enabled: boolean) => void;
+
   // Results
   setStagingResult: (imageId: string, result: StagingResult) => void;
   setStagingResults: (results: Record<string, StagingResult[]>) => void;
@@ -73,6 +76,7 @@ const initialState: AppState = {
   roomGroups: [],
   roomConfigs: {},
   stagingResults: {},
+  enableSpatialConsistency: false, // Experimental feature toggle
   isProcessing: false,
   projectId: undefined, // Will be auto-generated on first use
 };
@@ -246,6 +250,9 @@ export const useStore = create<AppState & AppActions>()(
 
   // Room selection
   selectRoom: (roomId) => set({ selectedRoomId: roomId }),
+
+  // Experimental Features
+  toggleSpatialConsistency: (enabled) => set({ enableSpatialConsistency: enabled }),
 
   // Results
   setStagingResult: async (imageId, result) => {

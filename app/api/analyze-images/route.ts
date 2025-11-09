@@ -17,6 +17,26 @@ interface AnalyzeRequest {
   }>;
 }
 
+// Generate a spatial fingerprint for room matching
+function generateSpatialFingerprint(
+  roomType: string,
+  signatureFeatures: string[],
+  flooring: string,
+  windowCount: number,
+  spatialNotes: string
+): string {
+  // Create a stable identifier from room characteristics
+  const components = [
+    roomType.toLowerCase().replace(/\s+/g, '-'),
+    flooring.toLowerCase().replace(/\s+/g, '-'),
+    `w${windowCount}`,
+    ...signatureFeatures.slice(0, 3).map(f => f.toLowerCase().replace(/\s+/g, '-').substring(0, 15)),
+  ];
+
+  // Create a hash-like fingerprint
+  return components.filter(Boolean).join('::');
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body: AnalyzeRequest = await request.json();
@@ -106,6 +126,17 @@ Focus on:
 
           const analysisData = JSON.parse(text);
 
+          // Generate spatial fingerprint from unique features
+          const signatureFeatures = analysisData.signatureFeatures || [];
+          const spatialNotes = analysisData.spatialNotes || '';
+          const spatialFingerprint = generateSpatialFingerprint(
+            analysisData.roomType,
+            signatureFeatures,
+            analysisData.flooring,
+            analysisData.windows,
+            spatialNotes
+          );
+
           const analysis: RoomAnalysis = {
             imageId: image.id,
             projectId: body.projectId, // Include projectId from request
@@ -115,9 +146,12 @@ Focus on:
             lighting: analysisData.lighting || '',
             flooring: analysisData.flooring || '',
             windows: analysisData.windows || 0,
+            signatureFeatures,
+            spatialNotes,
+            spatialFingerprint,
           };
 
-          console.log(`✓ Analyzed ${image.name}: ${analysis.roomType}`);
+          console.log(`✓ Analyzed ${image.name}: ${analysis.roomType} (fingerprint: ${spatialFingerprint})`);
           return { id: image.id, analysis };
 
         } catch (error) {

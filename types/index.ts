@@ -171,6 +171,9 @@ export interface AppState {
   // Results (array of versions per image)
   stagingResults: Record<string, StagingResult[]>;
 
+  // Experimental Features
+  enableSpatialConsistency?: boolean; // Toggle for cross-image consistency
+
   // UI state
   isProcessing: boolean;
   error?: string;

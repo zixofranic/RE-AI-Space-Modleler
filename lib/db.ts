@@ -468,41 +468,96 @@ export async function getEditHistory(stagingResultId: string) {
 export async function deleteProject(projectId: string) {
   if (!isSupabaseConfigured()) return false;
 
-  // Delete project (will cascade delete all related data)
-  const { error } = await supabase
-    .from('projects')
-    .delete()
-    .eq('id', projectId);
+  try {
+    // Delete all storage files for this project FIRST (before database cascades)
 
-  if (error) {
-    console.error('Error deleting project:', error);
+    // Delete original images
+    const { data: originalFiles, error: listOriginalError } = await supabase.storage
+      .from(STORAGE_BUCKETS.ORIGINAL_IMAGES)
+      .list(projectId);
+
+    if (listOriginalError) {
+      console.warn('Warning listing original images:', listOriginalError);
+    }
+
+    if (originalFiles && originalFiles.length > 0) {
+      const filesToDelete = originalFiles.map((file) => `${projectId}/${file.name}`);
+      console.log(`Deleting ${filesToDelete.length} original images...`);
+
+      const { error: deleteOriginalError } = await supabase.storage
+        .from(STORAGE_BUCKETS.ORIGINAL_IMAGES)
+        .remove(filesToDelete);
+
+      if (deleteOriginalError) {
+        console.error('Error deleting original images:', deleteOriginalError);
+        // Continue anyway - database deletion is more important
+      }
+    }
+
+    // Delete staged images
+    const { data: stagedFiles, error: listStagedError } = await supabase.storage
+      .from(STORAGE_BUCKETS.STAGED_IMAGES)
+      .list(projectId);
+
+    if (listStagedError) {
+      console.warn('Warning listing staged images:', listStagedError);
+    }
+
+    if (stagedFiles && stagedFiles.length > 0) {
+      const filesToDelete = stagedFiles.map((file) => `${projectId}/${file.name}`);
+      console.log(`Deleting ${filesToDelete.length} staged images...`);
+
+      const { error: deleteStagedError } = await supabase.storage
+        .from(STORAGE_BUCKETS.STAGED_IMAGES)
+        .remove(filesToDelete);
+
+      if (deleteStagedError) {
+        console.error('Error deleting staged images:', deleteStagedError);
+        // Continue anyway - database deletion is more important
+      }
+    }
+
+    // Delete thumbnails
+    const { data: thumbnailFiles, error: listThumbnailError } = await supabase.storage
+      .from(STORAGE_BUCKETS.THUMBNAILS)
+      .list(projectId);
+
+    if (listThumbnailError) {
+      console.warn('Warning listing thumbnails:', listThumbnailError);
+    }
+
+    if (thumbnailFiles && thumbnailFiles.length > 0) {
+      const filesToDelete = thumbnailFiles.map((file) => `${projectId}/${file.name}`);
+      console.log(`Deleting ${filesToDelete.length} thumbnails...`);
+
+      const { error: deleteThumbnailError } = await supabase.storage
+        .from(STORAGE_BUCKETS.THUMBNAILS)
+        .remove(filesToDelete);
+
+      if (deleteThumbnailError) {
+        console.error('Error deleting thumbnails:', deleteThumbnailError);
+        // Continue anyway
+      }
+    }
+
+    // Delete project from database (will cascade delete all related data)
+    const { error: deleteProjectError } = await supabase
+      .from('projects')
+      .delete()
+      .eq('id', projectId);
+
+    if (deleteProjectError) {
+      console.error('Error deleting project from database:', deleteProjectError);
+      return false;
+    }
+
+    console.log(`✅ Project ${projectId} deleted successfully`);
+    return true;
+
+  } catch (error) {
+    console.error('Unexpected error deleting project:', error);
     return false;
   }
-
-  // Delete all storage files for this project
-  const { data: originalFiles } = await supabase.storage
-    .from(STORAGE_BUCKETS.ORIGINAL_IMAGES)
-    .list(projectId);
-
-  if (originalFiles) {
-    const filesToDelete = originalFiles.map((file) => `${projectId}/${file.name}`);
-    await supabase.storage
-      .from(STORAGE_BUCKETS.ORIGINAL_IMAGES)
-      .remove(filesToDelete);
-  }
-
-  const { data: stagedFiles } = await supabase.storage
-    .from(STORAGE_BUCKETS.STAGED_IMAGES)
-    .list(projectId);
-
-  if (stagedFiles) {
-    const filesToDelete = stagedFiles.map((file) => `${projectId}/${file.name}`);
-    await supabase.storage
-      .from(STORAGE_BUCKETS.STAGED_IMAGES)
-      .remove(filesToDelete);
-  }
-
-  return true;
 }
 
 // Convert data URL to Blob for uploading
