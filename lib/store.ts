@@ -16,6 +16,7 @@ import {
   uploadImageToStorage,
   uploadStagedImage,
   dataURLtoBlob,
+  deleteProject as deleteProjectFromDB,
 } from './db';
 import { supabase, isSupabaseConfigured } from './supabase';
 
@@ -24,6 +25,7 @@ interface AppActions {
   setCurrentProperty: (property: { id: string; name: string; address?: string; isNew: boolean } | null) => void;
   loadAvailableProperties: () => Promise<void>;
   loadProject: (projectId: string) => Promise<void>;
+  deleteProject: (projectId: string) => Promise<boolean>;
   clearProject: () => void;
 
   // Style Guide ("Seed & Lock" for consistency)
@@ -452,6 +454,20 @@ export const useStore = create<AppState & AppActions>()(
       selectedPreset: undefined,
       currentStep: 'upload',
     });
+  },
+
+  deleteProject: async (projectId: string) => {
+    const success = await deleteProjectFromDB(projectId);
+    if (success) {
+      // If the deleted project is the current one, clear it
+      const state = get();
+      if (state.projectId === projectId) {
+        get().clearProject();
+      }
+      // Reload available properties
+      await get().loadAvailableProperties();
+    }
+    return success;
   },
 
   reset: () => set(initialState),

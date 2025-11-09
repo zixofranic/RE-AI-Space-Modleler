@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useStore } from '@/lib/store';
-import { ArrowLeft, Download, Edit } from 'lucide-react';
+import { ArrowLeft, Download, Edit, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { PhotoViewer } from '@/components/ui/photo-viewer';
 import { MAX_VERSIONS_PER_IMAGE } from '@/types';
@@ -19,14 +19,17 @@ export default function ProjectDetailPage() {
     uploadedImages,
     stagingResults,
     loadProject,
+    deleteProject,
     setStep,
   } = useStore();
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
   const [photoViewerOpen, setPhotoViewerOpen] = useState(false);
-  const [viewerImages, setViewerImages] = useState<string[]>([]);
+  const [viewerImages, setViewerImages] = useState<Array<{ src: string; alt: string; filename?: string }>>([]);
   const [viewerIndex, setViewerIndex] = useState(0);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -46,10 +49,27 @@ export default function ProjectDetailPage() {
     setStep('results');
     router.push('/');
   };
-  const openPhotoViewer = (images: string[], startIndex: number) => {
+  const openPhotoViewer = (images: Array<{ src: string; alt: string; filename?: string }>, startIndex: number) => {
     setViewerImages(images);
     setViewerIndex(startIndex);
     setPhotoViewerOpen(true);
+  };
+
+  const handleDeleteProject = async () => {
+    setDeleting(true);
+    try {
+      const success = await deleteProject(projectId);
+      if (success) {
+        router.push('/projects');
+      } else {
+        setError('Failed to delete project');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete project');
+    } finally {
+      setDeleting(false);
+      setShowDeleteConfirm(false);
+    }
   };
 
   const handleDownloadVersion = async (imageUrl: string, imageName: string, versionNum: number) => {
@@ -98,17 +118,31 @@ export default function ProjectDetailPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-8">
+    <>
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-8">
       <div className="max-w-7xl mx-auto">
         <div className="mb-8">
-          <Link href="/projects" className="inline-flex items-center text-gray-600 hover:text-gray-900 mb-4">
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Back to Projects
-          </Link>
+          <div className="flex items-center justify-between mb-4">
+            <Link href="/projects" className="inline-flex items-center text-gray-600 hover:text-gray-900">
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Back to Projects
+            </Link>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowDeleteConfirm(true)}
+              className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-300"
+            >
+              <Trash2 className="w-4 h-4 mr-2" />
+              Delete Project
+            </Button>
+          </div>
           <h1 className="text-4xl font-bold text-gray-900 mb-2">
-            {currentProperty?.name || 'Property Details'}
+            {currentProperty?.name !== 'Untitled Project'
+              ? currentProperty?.name
+              : (currentProperty?.address || 'Property Details')}
           </h1>
-          {currentProperty?.address && (
+          {currentProperty?.name !== 'Untitled Project' && currentProperty?.address && (
             <p className="text-gray-600 text-lg">{currentProperty.address}</p>
           )}
         </div>
@@ -117,42 +151,50 @@ export default function ProjectDetailPage() {
           {uploadedImages.map((image) => {
             const versions = stagingResults[image.id] || [];
             const canEdit = versions.length < MAX_VERSIONS_PER_IMAGE;
-            const allImages = [image.dataUrl, ...versions.map(v => v.stagedImageUrl!)];
+            const allImages = [
+              { src: image.dataUrl, alt: 'Original', filename: image.name },
+              ...versions.map((v, idx) => ({
+                src: v.stagedImageUrl!,
+                alt: `Version ${idx + 1}`,
+                filename: `${image.name}-version-${idx + 1}`
+              }))
+            ];
 
             return (
               <div key={image.id} className="bg-white rounded-xl shadow-lg overflow-hidden">
-                <div className="p-6 border-b border-gray-200">
-                  <div className="flex items-center gap-4">
-                    <img src={image.dataUrl} alt="Original" className="w-32 h-32 object-cover rounded-lg cursor-pointer hover:opacity-80 transition-opacity" onClick={() => openPhotoViewer(allImages, 0)} />
-                    <div className="flex-1">
-                      <h3 className="text-lg font-semibold text-gray-900">Original Image</h3>
-                      <p className="text-sm text-gray-600">{image.name}</p>
-                      <p className="text-xs text-gray-500 mt-2">
-                        {versions.length} version{versions.length !== 1 ? 's' : ''}
-                        {!canEdit && <span className="ml-2 text-amber-600">(Maximum {MAX_VERSIONS_PER_IMAGE} versions reached)</span>}
-                      </p>
+                <div className="p-6">
+                  <div className="mb-4">
+                    <h3 className="text-lg font-semibold text-gray-900">{image.name}</h3>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {versions.length} version{versions.length !== 1 ? 's' : ''}
+                      {!canEdit && <span className="ml-2 text-amber-600">(Maximum {MAX_VERSIONS_PER_IMAGE} versions reached)</span>}
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    {/* Original Image */}
+                    <div className="cursor-pointer" onClick={() => openPhotoViewer(allImages, 0)}>
+                      <img
+                        src={image.dataUrl}
+                        alt="Original"
+                        className="w-full aspect-video object-cover rounded-lg border-2 border-gray-200 hover:border-purple-500 transition-all hover:opacity-80"
+                      />
+                      <p className="text-center mt-2 text-sm font-medium text-gray-700">Original</p>
                     </div>
+
+                    {/* Staged Versions */}
+                    {versions.map((version, idx) => (
+                      <div key={idx} className="cursor-pointer" onClick={() => openPhotoViewer(allImages, idx + 1)}>
+                        <img
+                          src={version.stagedImageUrl}
+                          alt={`Version ${idx + 1}`}
+                          className="w-full aspect-video object-cover rounded-lg border-2 border-gray-200 hover:border-purple-500 transition-all hover:opacity-80"
+                        />
+                        <p className="text-center mt-2 text-sm font-medium text-gray-700">Version {idx + 1}</p>
+                      </div>
+                    ))}
                   </div>
                 </div>
-
-                {versions.length > 0 && (
-                  <div className="p-6">
-                    <h4 className="font-semibold text-gray-900 mb-4">Staged Versions</h4>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                      {versions.map((version, idx) => (
-                        <div key={idx} className="group relative">
-                          <img src={version.stagedImageUrl} alt={`Version ${idx + 1}`} className="w-full aspect-video object-cover rounded-lg border-2 border-gray-200 hover:border-purple-500 transition-colors" />
-                          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/60 transition-all rounded-lg flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100">
-                            <Button size="sm" variant="outline" onClick={() => handleDownloadVersion(version.stagedImageUrl!, image.name, idx + 1)}>
-                              <Download className="w-4 h-4" />
-                            </Button>
-                          </div>
-                          <p className="text-center mt-2 text-sm font-medium text-gray-700">Version {idx + 1}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
 
                 <div className="p-6 bg-gray-50 border-t border-gray-200">
                   <Button onClick={() => handleContinueEditing(image.id)} disabled={!canEdit} className="w-full bg-purple-600 hover:bg-purple-700 disabled:bg-gray-400" size="lg">
@@ -165,12 +207,42 @@ export default function ProjectDetailPage() {
           })}
         </div>
       </div>
-    </div>
+      </div>
+
+      {/* Delete Confirmation Dialog */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50" onClick={() => setShowDeleteConfirm(false)}>
+          <div className="bg-white rounded-lg p-6 max-w-md mx-4" onClick={(e) => e.stopPropagation()}>
+            <h2 className="text-xl font-bold text-gray-900 mb-2">Delete Project?</h2>
+            <p className="text-gray-600 mb-6">
+              Are you sure you want to delete &quot;{currentProperty?.name || 'this project'}&quot;? This action cannot be undone and will delete all images and versions.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <Button
+                variant="outline"
+                onClick={() => setShowDeleteConfirm(false)}
+                disabled={deleting}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleDeleteProject}
+                disabled={deleting}
+                className="bg-red-600 hover:bg-red-700 text-white"
+              >
+                {deleting ? 'Deleting...' : 'Delete Project'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <PhotoViewer
         isOpen={photoViewerOpen}
         onClose={() => setPhotoViewerOpen(false)}
         images={viewerImages}
         initialIndex={viewerIndex}
       />
+    </>
   );
 }

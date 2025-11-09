@@ -175,10 +175,10 @@ export default function MyProjectsPage() {
                   {/* Project Info */}
                   <div className="p-6">
                     <h3 className="text-xl font-semibold text-gray-900 mb-2 truncate">
-                      {project.name}
+                      {project.name !== 'Untitled Project' ? project.name : (project.address || project.name)}
                     </h3>
 
-                    {project.address && (
+                    {project.name !== 'Untitled Project' && project.address && (
                       <p className="text-sm text-gray-800 mb-2 truncate">
                         {project.address}
                       </p>
