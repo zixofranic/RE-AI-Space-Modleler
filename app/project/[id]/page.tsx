@@ -95,7 +95,7 @@ export default function ProjectDetailPage() {
         <div className="max-w-7xl mx-auto">
           <div className="text-center py-16">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
-            <p className="text-gray-600">Loading project...</p>
+            <p className="text-gray-900 font-medium">Loading project...</p>
           </div>
         </div>
       </div>
@@ -123,7 +123,7 @@ export default function ProjectDetailPage() {
       <div className="max-w-7xl mx-auto">
         <div className="mb-8">
           <div className="flex items-center justify-between mb-4">
-            <Link href="/projects" className="inline-flex items-center text-gray-600 hover:text-gray-900">
+            <Link href="/projects" className="inline-flex items-center text-gray-900 hover:text-black font-medium">
               <ArrowLeft className="w-4 h-4 mr-2" />
               Back to Projects
             </Link>
@@ -143,7 +143,7 @@ export default function ProjectDetailPage() {
               : (currentProperty?.address || 'Property Details')}
           </h1>
           {currentProperty?.name !== 'Untitled Project' && currentProperty?.address && (
-            <p className="text-gray-600 text-lg">{currentProperty.address}</p>
+            <p className="text-gray-900 text-lg">{currentProperty.address}</p>
           )}
         </div>
 
@@ -165,9 +165,9 @@ export default function ProjectDetailPage() {
                 <div className="p-6">
                   <div className="mb-4">
                     <h3 className="text-lg font-semibold text-gray-900">{image.name}</h3>
-                    <p className="text-xs text-gray-500 mt-1">
+                    <p className="text-sm text-gray-900 mt-1 font-medium">
                       {versions.length} version{versions.length !== 1 ? 's' : ''}
-                      {!canEdit && <span className="ml-2 text-amber-600">(Maximum {MAX_VERSIONS_PER_IMAGE} versions reached)</span>}
+                      {!canEdit && <span className="ml-2 text-amber-600 font-semibold">(Maximum {MAX_VERSIONS_PER_IMAGE} versions reached)</span>}
                     </p>
                   </div>
 
@@ -179,7 +179,7 @@ export default function ProjectDetailPage() {
                         alt="Original"
                         className="w-full aspect-video object-cover rounded-lg border-2 border-gray-200 hover:border-purple-500 transition-all hover:opacity-80"
                       />
-                      <p className="text-center mt-2 text-sm font-medium text-gray-700">Original</p>
+                      <p className="text-center mt-2 text-sm font-semibold text-gray-900">Original</p>
                     </div>
 
                     {/* Staged Versions */}
@@ -190,17 +190,36 @@ export default function ProjectDetailPage() {
                           alt={`Version ${idx + 1}`}
                           className="w-full aspect-video object-cover rounded-lg border-2 border-gray-200 hover:border-purple-500 transition-all hover:opacity-80"
                         />
-                        <p className="text-center mt-2 text-sm font-medium text-gray-700">Version {idx + 1}</p>
+                        <p className="text-center mt-2 text-sm font-semibold text-gray-900">Version {idx + 1}</p>
                       </div>
                     ))}
                   </div>
                 </div>
 
                 <div className="p-6 bg-gray-50 border-t border-gray-200">
-                  <Button onClick={() => handleContinueEditing(image.id)} disabled={!canEdit} className="w-full bg-purple-600 hover:bg-purple-700 disabled:bg-gray-400" size="lg">
-                    <Edit className="w-4 h-4 mr-2" />
-                    {canEdit ? `Continue Editing (${MAX_VERSIONS_PER_IMAGE - versions.length} edit${MAX_VERSIONS_PER_IMAGE - versions.length !== 1 ? 's' : ''} remaining)` : `Maximum ${MAX_VERSIONS_PER_IMAGE} Versions Reached`}
-                  </Button>
+                  {canEdit ? (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-sm text-gray-900 mb-2">
+                        <span className="font-semibold">Edit Credits Available:</span>
+                        <span className="font-bold text-purple-600">
+                          {MAX_VERSIONS_PER_IMAGE - versions.length} / {MAX_VERSIONS_PER_IMAGE - 1} remaining
+                        </span>
+                      </div>
+                      <Button onClick={() => handleContinueEditing(image.id)} className="w-full bg-purple-600 hover:bg-purple-700" size="lg">
+                        <Edit className="w-4 h-4 mr-2" />
+                        {versions.length === 0 ? 'Start Editing' : 'Continue Editing'}
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="text-center py-3">
+                      <p className="text-amber-600 font-bold">
+                        Maximum {MAX_VERSIONS_PER_IMAGE} versions reached
+                      </p>
+                      <p className="text-sm text-gray-900 font-medium mt-1">
+                        No more edits available for this image
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
             );
@@ -214,7 +233,7 @@ export default function ProjectDetailPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50" onClick={() => setShowDeleteConfirm(false)}>
           <div className="bg-white rounded-lg p-6 max-w-md mx-4" onClick={(e) => e.stopPropagation()}>
             <h2 className="text-xl font-bold text-gray-900 mb-2">Delete Project?</h2>
-            <p className="text-gray-600 mb-6">
+            <p className="text-gray-900 mb-6">
               Are you sure you want to delete &quot;{currentProperty?.name || 'this project'}&quot;? This action cannot be undone and will delete all images and versions.
             </p>
             <div className="flex gap-3 justify-end">

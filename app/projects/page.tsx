@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { getProjectsWithThumbnails } from '@/lib/database';
-import { FolderOpen, Calendar, Image as ImageIcon, ArrowLeft, ExternalLink } from 'lucide-react';
+import { FolderOpen, Calendar, Image as ImageIcon, ArrowLeft, ExternalLink, Edit } from 'lucide-react';
 
 interface ProjectWithImages {
   id: string;
@@ -61,7 +61,7 @@ export default function MyProjectsPage() {
         <div className="mb-8">
           <Link
             href="/"
-            className="inline-flex items-center text-gray-800 hover:text-gray-900 mb-4"
+            className="inline-flex items-center text-gray-900 hover:text-black mb-4 font-medium"
           >
             <ArrowLeft className="w-4 h-4 mr-2" />
             Back to Home
@@ -70,7 +70,7 @@ export default function MyProjectsPage() {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-4xl font-bold text-gray-900 mb-2">My Projects</h1>
-              <p className="text-gray-800">
+              <p className="text-gray-900 font-medium">
                 {projects.length} {projects.length === 1 ? 'project' : 'projects'}
               </p>
             </div>
@@ -113,11 +113,11 @@ export default function MyProjectsPage() {
         {/* Empty State */}
         {!loading && projects.length === 0 && (
           <div className="text-center py-16">
-            <FolderOpen className="w-16 h-16 text-gray-600 mx-auto mb-4" />
+            <FolderOpen className="w-16 h-16 text-gray-700 mx-auto mb-4" />
             <h2 className="text-2xl font-semibold text-gray-900 mb-2">
               No projects yet
             </h2>
-            <p className="text-gray-800 mb-6">
+            <p className="text-gray-900 mb-6">
               Upload some images to create your first project
             </p>
             <Link
@@ -179,24 +179,34 @@ export default function MyProjectsPage() {
                     </h3>
 
                     {project.name !== 'Untitled Project' && project.address && (
-                      <p className="text-sm text-gray-800 mb-2 truncate">
+                      <p className="text-sm text-gray-900 mb-2 truncate">
                         {project.address}
                       </p>
                     )}
 
-                    <div className="flex items-center text-sm text-gray-700 mb-3">
+                    <div className="flex items-center text-sm text-gray-900 mb-3">
                       <Calendar className="w-4 h-4 mr-2" />
                       {formatDate(project.updated_at)}
                     </div>
 
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-gray-800">
+                    <div className="flex items-center justify-between text-sm mb-3">
+                      <span className="text-gray-900 font-medium">
                         {imageCount} {imageCount === 1 ? 'image' : 'images'}
                       </span>
                       <span className="text-blue-600 font-medium group-hover:underline">
-                        View Project →
+                        View Details →
                       </span>
                     </div>
+
+                    {/* Edit Button */}
+                    <Link
+                      href={`/project/${project.id}`}
+                      onClick={(e) => e.stopPropagation()}
+                      className="w-full inline-flex items-center justify-center px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-medium"
+                    >
+                      <Edit className="w-4 h-4 mr-2" />
+                      Edit Project
+                    </Link>
                   </div>
                 </Link>
               );
