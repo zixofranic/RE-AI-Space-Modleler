@@ -14,6 +14,7 @@ export function GenerationStep() {
     selectedPreset,
     roomConfigs,
     projectStyleGuide,
+    enableSpatialConsistency,
     setStagingResult,
     setProjectStyleGuide,
     nextStep,
@@ -27,6 +28,9 @@ export function GenerationStep() {
   const [layeredLayers, setLayeredLayers] = useState<LayerResult[]>([]);
   const [currentLayer, setCurrentLayer] = useState(1);
   const [useLayered, setUseLayered] = useState(false);
+
+  // Spatial consistency state - track first staged image URL for visual reference
+  const [firstStagedImageUrl, setFirstStagedImageUrl] = useState<string | null>(null);
 
   // Use ref instead of state to persist across React Strict Mode remounts
   const hasStartedRef = useRef(false);
@@ -96,6 +100,8 @@ export function GenerationStep() {
             analysis,
             globalSettings,
             projectStyleGuide, // Include style guide for consistency
+            enableSpatialConsistency, // Pass toggle state
+            referenceImageUrl: currentIndex > 1 && enableSpatialConsistency ? firstStagedImageUrl : undefined, // 🧪 Visual reference for 2nd+ images
           }),
         });
 
@@ -137,6 +143,17 @@ export function GenerationStep() {
         }
 
         setGenerationStatus(prev => ({ ...prev, [image.id]: 'complete' }));
+
+        // ============================================================
+        // PHASE 1.5: Capture First Staged Image URL for Visual Reference
+        // ============================================================
+        // If spatial consistency is enabled and this is the first image,
+        // save the staged image URL for visual transfer to subsequent images
+        if (currentIndex === 1 && enableSpatialConsistency && result.stagedImageUrl) {
+          setFirstStagedImageUrl(result.stagedImageUrl);
+          console.log('🧪 [Visual Spatial Consistency] First staged image URL captured for visual reference');
+          console.log('   Image 2+ will receive this as 4th part in Gemini API call');
+        }
 
         // ============================================================
         // PHASE 2: Extract Style Guide from First Staged Image

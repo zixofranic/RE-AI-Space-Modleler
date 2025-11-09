@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { getProjectsWithThumbnails } from '@/lib/database';
+import { UserMenu } from '@/components/auth/UserMenu';
 import { FolderOpen, Calendar, Image as ImageIcon, ArrowLeft, ExternalLink, Edit } from 'lucide-react';
 
 interface ProjectWithImages {
@@ -75,13 +76,16 @@ export default function MyProjectsPage() {
               </p>
             </div>
 
-            <button
-              onClick={loadProjects}
-              disabled={loading}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-            >
-              {loading ? 'Loading...' : 'Refresh'}
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={loadProjects}
+                disabled={loading}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 font-medium"
+              >
+                {loading ? 'Loading...' : 'Refresh'}
+              </button>
+              <UserMenu />
+            </div>
           </div>
         </div>
 

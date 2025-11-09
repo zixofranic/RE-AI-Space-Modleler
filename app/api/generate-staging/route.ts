@@ -15,6 +15,8 @@ interface GenerateRequest {
   analysis: RoomAnalysis;
   globalSettings?: Partial<DesignSettings>;
   projectStyleGuide?: ProjectStyleGuide; // "Seed & Lock" style guide
+  enableSpatialConsistency?: boolean; // Experimental spatial consistency toggle
+  referenceImageUrl?: string; // 🧪 VISUAL REFERENCE: Staged Image 1 URL for multi-image consistency
 }
 
 /**
@@ -180,56 +182,19 @@ ${body.projectStyleGuide.greeneryType ? `- GREENERY: ${body.projectStyleGuide.gr
 `
       : '';
 
-    const inpaintingPrompt = `You are a professional virtual staging AI.
-
-TASK: Fill the white-masked area of the original image with staged furniture.
-All black-masked areas MUST remain 100% identical to the original image.
-
---- STAGING INSTRUCTIONS ---
-- ROOM: ${body.analysis.roomType}
-${settings.customAdditions ? `- CUSTOM REQUESTS: ${settings.customAdditions}` : ''}
-
---- PRESET CONSTRAINTS (MUST FOLLOW) ---
-- DESIGN STYLE: ${settings.designStyle || 'Modern Contemporary'}
-- COLOR PALETTE: ${settings.colorPalette || 'Neutral tones'}
-- WOOD FINISH: ${settings.woodFinish || 'Natural wood tones'}
-- METAL ACCENTS: ${settings.metalAccents || 'Brushed nickel'}
-- FURNITURE STYLE: ${settings.furnitureStyle || 'Contemporary pieces'}
-- RUG STYLE: ${settings.rugStyle || 'Neutral area rug'}
-- GREENERY: ${settings.greenery || 'Minimal plants'}
-${styleGuideSection}
-${layer2}
-${layer3}
-
---- LIGHTING & SHADOWS (CRITICAL FOR REALISM) ---
-Match all perspective, lighting, and shadow from the original image.
-
-Every piece of furniture MUST have these 3 shadow types:
-
-1. CONTACT SHADOW (Most Important):
-   - Dark, soft shadow where furniture touches the floor/rug
-   - This prevents the "floating" appearance
-   - Must be directly under furniture legs/bases
-   - Soft-edged, dark pools of shadow
-
-2. CAST SHADOW (Directional):
-   - Soft shadow extending away from the light source
-   - Must match the direction of existing shadows in the room
-   - Follow the natural light from windows
-
-3. AMBIENT OCCLUSION (Depth):
-   - Subtle darkening in crevices and corners
-   - Darken under cushions and where furniture meets walls
-   - Add depth under tables, behind furniture
-   - Darken inside shelving units
-
-The mask defines the editable area. Focus on creating beautiful, realistic staging with hyper-realistic shadows integrated into the scene.
-`;
+    // Build the appropriate prompt based on whether we have a visual reference
+    const inpaintingPrompt = body.referenceImageUrl
+      ? buildSpatialConsistencyPrompt(body, settings, styleGuideSection)
+      : buildStandardStagingPrompt(body, settings, styleGuideSection, layer2, layer3);
 
     // ============================================================================
-    // STEP 3: Inpainting API call (ALWAYS 3-part with mask)
+    // STEP 3: Inpainting API call (3-part with mask, or 4-part with reference image)
     // ============================================================================
-    console.log('🎨 Step 3: Generating staged image with mask-based inpainting...');
+    const hasReferenceImage = !!body.referenceImageUrl;
+    console.log(hasReferenceImage
+      ? '🧪 Step 3: Generating with VISUAL SPATIAL CONSISTENCY (4-part API call)...'
+      : '🎨 Step 3: Generating staged image with mask-based inpainting (3-part)...'
+    );
 
     const parts: any[] = [
       { text: inpaintingPrompt },
@@ -246,6 +211,21 @@ The mask defines the editable area. Focus on creating beautiful, realistic stagi
         },
       },
     ];
+
+    // 🧪 Add reference image as 4th part if spatial consistency is enabled
+    if (hasReferenceImage && body.referenceImageUrl) {
+      console.log('🔗 Adding reference image for visual spatial consistency...');
+      const refImageBase64 = await dataUrlToBase64(body.referenceImageUrl);
+      const refMimeType = getMimeType(body.referenceImageUrl);
+
+      parts.push({
+        inlineData: {
+          mimeType: refMimeType,
+          data: refImageBase64,
+        },
+      });
+      console.log('✅ Reference image added as 4th part');
+    }
 
     const result = await model.generateContent({
       contents: [
@@ -722,6 +702,123 @@ function getStyleGuidelines(style: string): string {
   }
 
   return guidelines['contemporary'];
+}
+
+// ============================================================================
+// STANDARD STAGING PROMPT (Toggle OFF or Image 1)
+// ============================================================================
+function buildStandardStagingPrompt(
+  body: GenerateRequest,
+  settings: Partial<DesignSettings>,
+  styleGuideSection: string,
+  layer2: string,
+  layer3: string
+): string {
+  return `You are a professional virtual staging AI.
+
+TASK: Fill the white-masked area of the original image with staged furniture.
+All black-masked areas MUST remain 100% identical to the original image.
+
+--- STAGING INSTRUCTIONS ---
+- ROOM: ${body.analysis.roomType}
+${settings.customAdditions ? `- CUSTOM REQUESTS: ${settings.customAdditions}` : ''}
+
+--- PRESET CONSTRAINTS (MUST FOLLOW) ---
+- DESIGN STYLE: ${settings.designStyle || 'Modern Contemporary'}
+- COLOR PALETTE: ${settings.colorPalette || 'Neutral tones'}
+- WOOD FINISH: ${settings.woodFinish || 'Natural wood tones'}
+- METAL ACCENTS: ${settings.metalAccents || 'Brushed nickel'}
+- FURNITURE STYLE: ${settings.furnitureStyle || 'Contemporary pieces'}
+- RUG STYLE: ${settings.rugStyle || 'Neutral area rug'}
+- GREENERY: ${settings.greenery || 'Minimal plants'}
+${styleGuideSection}
+${layer2}
+${layer3}
+
+--- LIGHTING & SHADOWS (CRITICAL FOR REALISM) ---
+Match all perspective, lighting, and shadow from the original image.
+
+Every piece of furniture MUST have these 3 shadow types:
+
+1. CONTACT SHADOW (Most Important):
+   - Dark, soft shadow where furniture touches the floor/rug
+   - This prevents the "floating" appearance
+   - Must be directly under furniture legs/bases
+   - Soft-edged, dark pools of shadow
+
+2. CAST SHADOW (Directional):
+   - Soft shadow extending away from the light source
+   - Must match the direction of existing shadows in the room
+   - Follow the natural light from windows
+
+3. AMBIENT OCCLUSION (Depth):
+   - Subtle darkening in crevices and corners
+   - Darken under cushions and where furniture meets walls
+   - Add depth under tables, behind furniture
+   - Darken inside shelving units
+
+The mask defines the editable area. Focus on creating beautiful, realistic staging with hyper-realistic shadows integrated into the scene.
+`;
+}
+
+// ============================================================================
+// SPATIAL CONSISTENCY PROMPT (Toggle ON - Visual Transfer)
+// ============================================================================
+function buildSpatialConsistencyPrompt(
+  body: GenerateRequest,
+  settings: Partial<DesignSettings>,
+  styleGuideSection: string
+): string {
+  return `You are a spatial consistency AI. You will be given FOUR inputs:
+1. A "Reference Image" (a staged room) - THE LAST IMAGE
+2. A "Target Image" (the *same room* from a different angle, but empty) - IMAGE 2
+3. A "Mask" (defining the editable floor area of the Target Image) - IMAGE 3
+4. This text prompt
+
+TASK:
+Stage the "Target Image" by "transferring" the furniture from the "Reference Image" into the new perspective.
+
+CRITICAL RULES:
+1. **PRESERVE TARGET ARCHITECTURE:** Use the "Mask" to preserve all walls, windows, doors, and architecture of the "Target Image". The mask shows which pixels you can edit (white) vs must preserve (black).
+
+2. **IDENTIFY & ANALYZE:** Look at the "Reference Image" and identify the key furniture pieces:
+   - What is the primary furniture? (e.g., bed, sofa, dining table)
+   - What are the secondary pieces? (e.g., nightstands, side tables, chairs)
+   - What are the accent pieces? (e.g., rug, plants, lamps, art)
+
+3. **RE-CREATE EXACT SAME PIECES:** Re-create those *exact same* pieces of furniture in the "Target Image":
+   - SAME style (e.g., if the bed has a tufted headboard, the target must too)
+   - SAME color (e.g., if the sofa is charcoal gray, the target must be charcoal gray)
+   - SAME materials (use the Project Style Guide below for exact material names)
+   - SAME scale (this is critical - if the bed looks like a Queen, it must be a Queen in target too)
+
+4. **LOGICAL PLACEMENT:** Place the furniture logically in the new perspective:
+   - If the bed is against the left wall in reference, find its corresponding position in target
+   - Maintain the same spatial relationships (e.g., nightstands still beside bed)
+   - Consider that some furniture from the reference may be visible from this new angle
+   - The two images show the SAME PHYSICAL SPACE from different angles
+
+5. **MATCH SCALE PRECISELY:** The scale of the furniture must be consistent:
+   - Use visual cues from both images (windows, doors, ceiling height)
+   - A 7-foot sofa in the reference should be a 7-foot sofa in the target
+   - Furniture should occupy similar proportions of floor space
+
+6. **MAINTAIN SHADOWS & REALISM:** Every piece of furniture MUST have:
+   - CONTACT SHADOW: Dark shadow where furniture touches floor
+   - CAST SHADOW: Directional shadow from light source
+   - AMBIENT OCCLUSION: Darkening in crevices and corners
+
+This is a visual-spatial reasoning task. The final image must look like the *same furniture* in the *same room*, just viewed from a new angle.
+
+${styleGuideSection}
+
+--- TARGET ROOM ANALYSIS ---
+- ROOM: ${body.analysis.roomType}
+- SPATIAL NOTES: ${body.analysis.spatialNotes || 'Same space as reference image'}
+${settings.customAdditions ? `- CUSTOM REQUESTS: ${settings.customAdditions}` : ''}
+
+OUTPUT: Generate a staged image of the Target room that looks like the Reference room from a new angle.
+`;
 }
 
 // ============================================================================
