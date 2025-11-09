@@ -45,6 +45,7 @@ export interface RoomAnalysis {
   };
   spatialFingerprint?: string;
   signatureFeatures?: string[];
+  spatialNotes?: string;
 }
 
 export interface RoomGroup {
