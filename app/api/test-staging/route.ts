@@ -132,7 +132,7 @@ export async function POST(request: NextRequest) {
     // ============================================================================
     console.log('🧪 TEST Step 2: Building simple prompt...');
 
-    const simplePrompt = `Stage this ${body.analysis.roomType} with ${body.config.settings.designStyle || 'modern'} furniture.
+    const simplePrompt = `Stage this ${body.analysis.roomType} with ${body.config.settings?.designStyle || 'modern'} furniture.
 
 Simple rules:
 - Do not delete or remove doors or windows
