@@ -133,7 +133,19 @@ export interface Property {
   created_at?: string;
   updated_at?: string;
   imageCount?: number;
+  collectionCount?: number;
   isNew?: boolean;
+}
+
+export interface Collection {
+  id: string;
+  project_id: string;
+  name: string;
+  room_type?: string;
+  created_at?: string;
+  updated_at?: string;
+  imageCount?: number;
+  metadata?: any;
 }
 
 export interface ProjectStyleGuide {

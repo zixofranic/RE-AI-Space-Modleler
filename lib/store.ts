@@ -488,11 +488,11 @@ export const useStore = create<AppState & AppActions>()(
         projectId: state.projectId,
         currentProperty: state.currentProperty,
         projectStyleGuide: state.projectStyleGuide,
-        currentStep: state.currentStep,
         selectedMode: state.selectedMode,
         selectedPreset: state.selectedPreset,
         selectedRoomId: state.selectedRoomId,
         // Don't persist:
+        // - currentStep (always start fresh on 'upload')
         // - uploadedImages (too large, in Supabase)
         // - roomAnalyses (load from DB)
         // - roomGroups (regenerate)

@@ -29,70 +29,27 @@ async function generateFloorMask(imageBase64: string, mimeType: string, imageId:
       model: 'gemini-2.5-flash-image'
     });
 
-    // Build door-specific instructions from analysis
-    const doorCount = analysis.doors || 0;
-    const doorDetails = analysis.doorDetails || [];
-
-    let doorInstructions = '';
-    if (doorCount > 0) {
-      doorInstructions = `
-DOOR DETECTION RESULTS (from AI analysis):
-- This room has ${doorCount} door(s)`;
-
-      if (doorDetails.length > 0) {
-        doorInstructions += '\n- Door locations and details:';
-        doorDetails.forEach((door, idx) => {
-          doorInstructions += `\n  • Door ${idx + 1}: ${door.location} - ${door.type} door (${door.state})`;
-        });
-      }
-
-      doorInstructions += `\n- You MUST protect ALL ${doorCount} door(s) with black paint
-- Protect 3-foot clearance in front of each door`;
-    } else {
-      doorInstructions = '\n⚠️ No doors detected in analysis - carefully scan the image for any doors that may have been missed';
-    }
-
     const maskPrompt = `
-Create a binary segmentation mask for this room image.
-${doorInstructions}
+You are a technical segmentation tool. Your sole task is to generate a new, binary, black-and-white mask based on the provided photo.
+
+Do NOT edit the original photo. You must CREATE A NEW image.
+
+TASK:
+1. Start with a new, blank image that is pure BLACK (#000000).
+2. Analyze the provided photo to find the floor area (the carpet, hardwood, or tile).
+3. Paint ONLY the pixels corresponding to the floor area PURE WHITE (#FFFFFF).
+4. The final output must be this new 2-color (black and white) mask.
 
 OUTPUT REQUIREMENTS:
-- Return a black and white image with EXACT same dimensions as input
-- WHITE (#FFFFFF): Available floor area for furniture placement
-- BLACK (#000000): Everything that must be preserved
+- The output MUST be a binary black-and-white image.
+- The output MUST NOT look like the original photo.
+- The output MUST have the exact same dimensions as the input.
 
-CRITICAL - Mark as BLACK (preserved):
-1. ARCHITECTURAL ELEMENTS:
-   - All walls, ceiling, and ceiling fixtures (fans, lights, chandeliers)
-   - All windows and window frames
-   - ALL doors (open or closed) and door frames - paint the ENTIRE door black
-   - Door trim, baseboards, crown molding, chair rails
-   - Built-in features (closets, shelves, radiators)
-   - Electrical outlets, switches, vents, thermostats
+COLOR RULES:
+- WHITE (#FFFFFF): Only the floor surface (carpet, hardwood, tile).
+- BLACK (#000000): Everything else (walls, doors, windows, ceiling, ceiling fan, trim, baseboards, etc.).
 
-2. PATHWAYS & CIRCULATION (CRITICAL FOR USABILITY):
-   - Floor area directly in front of ALL ${doorCount || ''} doors (minimum 36 inches / 3 feet clearance)
-   - Walking paths between doors and room entrances
-   - Natural circulation routes through the room
-   - Entry/exit zones and thresholds
-
-3. SAFETY ZONES:
-   - Do NOT block access to any door
-   - Do NOT block windows (24" clearance)
-   - Maintain clear paths for egress
-
-Mark as WHITE (editable for furniture):
-- Only the central floor area suitable for furniture
-- Areas that are NOT within 3 feet of any door
-- Areas that are NOT in natural walking paths between doors
-- Open floor space away from architectural features
-
-SPECIAL ATTENTION:
-- In rooms with multiple doors, ensure clear paths between them remain unobstructed
-- If unsure whether an area is a pathway, mark it BLACK (preserve it)
-- Better to have too much black than too much white
-
-This mask will be used for inpainting - white areas will be edited, black areas will be preserved exactly.
+This is a data file, not a photo. Generate a pure binary mask.
 `;
 
     const result = await model.generateContent({
@@ -424,36 +381,53 @@ function buildSimpleLightingHint(analysis: RoomAnalysis | undefined): string {
 function buildSpatialFoundationLayer(analysis: RoomAnalysis): string {
   const features = analysis.features || [];
   const windows = analysis.windows || 0;
+  const doors = analysis.doors || 0;
+  const doorDetails = analysis.doorDetails || [];
 
-  // Detect doorways from features
-  const doorFeatures = features.filter(f =>
-    f.toLowerCase().includes('door') ||
-    f.toLowerCase().includes('entry') ||
-    f.toLowerCase().includes('archway')
-  );
+  // Build door information from analysis
+  let doorInfo = '';
+  if (doors > 0 && doorDetails.length > 0) {
+    doorInfo = doorDetails.map((door, idx) =>
+      `- Door ${idx + 1}: ${door.location} - ${door.type} door (${door.state})
+  → FORBIDDEN ZONE: 36" (3 feet) clearance in front
+  → RULE: NO furniture within this zone
+  ${door.state === 'open' ? '  → EXTRA CAUTION: Door is OPEN - requires wider swing clearance' : ''}`
+    ).join('\n');
+  } else if (doors > 0) {
+    doorInfo = `- ${doors} door(s) detected in this room
+  → FORBIDDEN ZONE: 36" (3 feet) clearance in front of EACH door
+  → RULE: Identify door locations in image and keep ALL clear`;
+  } else {
+    // Fallback to feature detection
+    const doorFeatures = features.filter(f =>
+      f.toLowerCase().includes('door') ||
+      f.toLowerCase().includes('entry') ||
+      f.toLowerCase().includes('archway')
+    );
+    doorInfo = doorFeatures.length > 0
+      ? doorFeatures.map(f => `- ${f}\n  → FORBIDDEN ZONE: 36" (3 feet) clearance\n  → RULE: NO furniture in this zone`).join('\n')
+      : `- Assume 1-2 doorways exist (standard for ${analysis.roomType})\n  → FORBIDDEN ZONE: 36" clearance in front of all doors\n  → RULE: Identify door locations in image and keep clear`;
+  }
 
   // Detect windows
   const windowInfo = windows > 0
     ? `\n🪟 WINDOWS:\n- Count: ${windows} window(s)\n- Location: Visible in image\n- CRITICAL RULE: Do NOT place tall furniture in front of windows\n- PRESERVE: Natural light pathways and window views`
     : '';
 
-  // Detect pathways
-  const pathwayInfo = doorFeatures.length > 0
-    ? `\n🚶 TRAFFIC PATHWAYS:\n- Clear pathways required from doors to main areas\n- Minimum width: 36 inches (3 feet)\n- CRITICAL RULE: These zones MUST remain completely clear of furniture`
-    : '\n🚶 TRAFFIC PATHWAYS:\n- Assume entry point at one wall\n- Maintain 36" clear pathway to center of room';
+  // Traffic pathway info
+  const pathwayInfo = doors > 0
+    ? `\n🚶 TRAFFIC PATHWAYS:\n- Clear pathways required between ALL ${doors} doors\n- Minimum width: 36 inches (3 feet)\n- CRITICAL RULE: These zones MUST remain completely clear of furniture`
+    : '\n🚶 TRAFFIC PATHWAYS:\n- Maintain 36" clear pathway from entry to center of room';
 
   return `
 ==============================================
 LAYER 1: SPATIAL FOUNDATION (HIGHEST PRIORITY)
 ==============================================
 
-${analysis.roomType.toUpperCase()} - ${analysis.dimensions?.width ? `${analysis.dimensions.width}' × ${analysis.dimensions.height}'` : 'Standard residential size'}
+${analysis.roomType.toUpperCase()} - ${analysis.dimensions?.estimated || 'Standard size'}
 
-🚪 DOORS & OPENINGS:
-${doorFeatures.length > 0
-  ? doorFeatures.map(f => `- ${f}\n  → FORBIDDEN ZONE: 36" (3 feet) clearance in front\n  → RULE: NO furniture within this zone`).join('\n')
-  : `- Assume 1-2 doorways exist (standard for ${analysis.roomType})\n  → FORBIDDEN ZONE: 36" clearance in front of all doors\n  → RULE: Identify door locations in image and keep clear`
-}
+🚪 DOORS & OPENINGS (${doors} DETECTED):
+${doorInfo}
 ${windowInfo}${pathwayInfo}
 
 🏗️ STRUCTURAL ELEMENTS TO PRESERVE:

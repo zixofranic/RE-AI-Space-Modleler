@@ -11,7 +11,7 @@ import { MAX_VERSIONS_PER_IMAGE } from '@/types';
 import JSZip from 'jszip';
 
 export function ResultsView() {
-  const { uploadedImages, stagingResults, roomAnalyses, projectId, reset, setStagingResult } = useStore();
+  const { uploadedImages, stagingResults, roomAnalyses, projectId, currentProperty, reset, setStep, setStagingResult } = useStore();
   const [activeTab, setActiveTab] = useState<'results' | 'collections'>('results');
   const [selectedImage, setSelectedImage] = useState<string | null>(
     uploadedImages[0]?.id || null
@@ -248,11 +248,21 @@ export function ResultsView() {
             <Button
               size="lg"
               variant="outline"
-              onClick={() => reset()}
+              onClick={() => setStep('upload')}
             >
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              Start New Project
+              <ImageIcon className="w-4 h-4 mr-2" />
+              Add More Photos
             </Button>
+            {currentProperty && (
+              <Button
+                size="lg"
+                variant="ghost"
+                onClick={() => window.location.href = `/project/${projectId}`}
+              >
+                <FolderOpen className="w-4 h-4 mr-2" />
+                View Project
+              </Button>
+            )}
           </div>
         </>
       )}
