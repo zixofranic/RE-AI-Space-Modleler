@@ -129,11 +129,11 @@ export async function POST(request: NextRequest) {
     const mimeType = getMimeType(body.imageDataUrl);
 
     // ============================================================================
-    // STEP 1: MASK GENERATION DISABLED
+    // STEP 1: Generate floor mask for inpainting
     // ============================================================================
-    // Mask generation removed - gemini-2.5-flash-image cannot do binary segmentation
-    // Relying on spatial prompts and door detection in Layer 1 instead
-    console.log('ℹ️ Step 1: Skipping mask generation (disabled)');
+    // Mask is a COMMAND (not a suggestion) - black pixels CANNOT be edited
+    console.log('🎭 Step 1: Generating floor mask (generative approach)...');
+    const maskBase64 = await generateFloorMask(imageBase64, mimeType, body.imageId, body.analysis, body.analysis.projectId);
 
     // Merge settings with global settings
     const settings = {
@@ -170,12 +170,12 @@ ${body.projectStyleGuide.greeneryType ? `- GREENERY: ${body.projectStyleGuide.gr
       : buildStandardStagingPrompt(body, settings, styleGuideSection, layer2, layer3);
 
     // ============================================================================
-    // STEP 3: Staging API call (2-part: prompt + image, or 3-part with reference image)
+    // STEP 3: Inpainting API call (3-part with mask, or 4-part with reference image)
     // ============================================================================
     const hasReferenceImage = !!body.referenceImageUrl;
     console.log(hasReferenceImage
-      ? '🧪 Step 3: Generating with VISUAL SPATIAL CONSISTENCY (3-part API call)...'
-      : '🎨 Step 3: Generating staged image with prompt-based staging (2-part)...'
+      ? '🧪 Step 3: Generating with VISUAL SPATIAL CONSISTENCY (4-part API call)...'
+      : '🎨 Step 3: Generating staged image with mask-based inpainting (3-part)...'
     );
 
     const parts: any[] = [
@@ -186,9 +186,15 @@ ${body.projectStyleGuide.greeneryType ? `- GREENERY: ${body.projectStyleGuide.gr
           data: imageBase64,
         },
       },
+      {
+        inlineData: {
+          mimeType: 'image/png',
+          data: maskBase64,
+        },
+      },
     ];
 
-    // 🧪 Add reference image as 3rd part if spatial consistency is enabled
+    // 🧪 Add reference image as 4th part if spatial consistency is enabled
     if (hasReferenceImage && body.referenceImageUrl) {
       console.log('🔗 Adding reference image for visual spatial consistency...');
       const refImageBase64 = await dataUrlToBase64(body.referenceImageUrl);
@@ -200,7 +206,7 @@ ${body.projectStyleGuide.greeneryType ? `- GREENERY: ${body.projectStyleGuide.gr
           data: refImageBase64,
         },
       });
-      console.log('✅ Reference image added as 3rd part');
+      console.log('✅ Reference image added as 4th part');
     }
 
     const result = await model.generateContent({
@@ -718,25 +724,32 @@ function buildStandardStagingPrompt(
 ): string {
   return `You are a professional virtual staging AI.
 
-TASK: Add staged furniture to this empty room image while preserving ALL architectural elements.
+TASK: Fill the white-masked area of the original image with staged furniture.
+All black-masked areas MUST remain 100% identical to the original image.
+
+🎭 MASK = TECHNICAL COMMAND (Not a Suggestion):
+- You will receive a BLACK and WHITE mask image
+- BLACK pixels = FORBIDDEN - you CANNOT edit these pixels (walls, doors, windows, ceiling, trim)
+- WHITE pixels = ALLOWED - you CAN edit these pixels (floor only)
+- This is a TECHNICAL constraint, not a creative suggestion
+- You are technically unable to modify black pixels
 
 🚨🚨🚨 CRITICAL PRESERVATION RULES 🚨🚨🚨
-BEFORE placing ANY furniture, you MUST:
-1. IDENTIFY all doors in the image (including closet doors)
-2. IDENTIFY all windows in the image
-3. KEEP these areas 100% VISIBLE and UNOBSTRUCTED
+The mask protects:
+- ALL ${body.analysis.doors || 0} doors (including closet doors) = BLACK in mask
+- ALL ${body.analysis.windows || 0} windows = BLACK in mask
+- All walls, ceilings, baseboards, trim = BLACK in mask
+- Only the floor = WHITE in mask
 
 ⛔ ABSOLUTELY FORBIDDEN:
-❌ DO NOT cover, hide, or block ANY doors (regular doors OR closet doors)
-❌ DO NOT place furniture in front of doors or door openings
-❌ DO NOT cover windows with tall furniture
-❌ DO NOT modify walls, ceilings, floors, baseboards, trim, door frames
-❌ DO NOT modify built-in features (closets, shelving, architectural elements)
+❌ DO NOT edit any BLACK pixels in the mask
+❌ DO NOT modify walls, doors, windows, ceiling, trim, baseboards
+❌ DO NOT place furniture outside the white-masked floor area
 
 ✅ YOU MAY ONLY:
-✓ Add furniture to the floor (keeping it away from doors)
-✓ Add rugs to the floor
-✓ Add decor items (art, plants, lamps)
+✓ Add furniture within the WHITE floor area of the mask
+✓ Add rugs within the WHITE floor area
+✓ Add decor items that fit within the WHITE area
 
 --- STAGING INSTRUCTIONS ---
 - ROOM: ${body.analysis.roomType}
@@ -779,13 +792,13 @@ Every piece of furniture MUST have these 3 shadow types:
 Focus on creating beautiful, realistic staging with hyper-realistic shadows integrated into the scene.
 
 🚨 FINAL REMINDER - READ THIS BEFORE GENERATING:
-1. This room has ${body.analysis.doors || 0} door(s) - DO NOT cover, hide, or block ANY of them
-2. All ${body.analysis.doors || 0} doors MUST be 100% visible in the final staged image
-3. COMMON MISTAKE: Placing a dresser/wardrobe that covers a closet door = FAILURE
-4. Look at the original image, identify where each door is located, keep those areas completely clear
-5. Only add furniture to the open floor space that is NOT near any doors
+1. You have a MASK image - BLACK pixels CANNOT be edited (this is a technical constraint)
+2. The mask protects ${body.analysis.doors || 0} door(s) - they are BLACK in the mask
+3. ONLY edit the WHITE pixels (floor area)
+4. BLACK areas (walls, doors, windows) MUST remain identical to original image
+5. This is not a suggestion - the mask is a technical command
 
-REMEMBER: Preserve all existing architecture. Only add furniture and decor items to open floor space.
+The mask defines the editable area. Focus on creating beautiful, realistic staging within the white-masked floor area with hyper-realistic shadows.
 `;
 }
 
@@ -797,16 +810,17 @@ function buildSpatialConsistencyPrompt(
   settings: Partial<DesignSettings>,
   styleGuideSection: string
 ): string {
-  return `You are a spatial consistency AI. You will be given THREE inputs:
+  return `You are a spatial consistency AI. You will be given FOUR inputs:
 1. This text prompt
 2. A "Target Image" (an empty room from a new angle) - IMAGE 1
-3. A "Reference Image" (the *same room* staged with furniture from a different angle) - IMAGE 2
+3. A "Mask" (defining the editable floor area of the Target Image) - IMAGE 2
+4. A "Reference Image" (the *same room* staged with furniture from a different angle) - IMAGE 3
 
 TASK:
 Stage the "Target Image" by "transferring" the furniture from the "Reference Image" into the new perspective.
 
 CRITICAL RULES:
-1. **PRESERVE TARGET ARCHITECTURE:** Preserve all walls, windows, doors, and architecture of the "Target Image". DO NOT modify the room structure, ONLY add furniture.
+1. **PRESERVE TARGET ARCHITECTURE:** Use the "Mask" to preserve all walls, windows, doors, and architecture of the "Target Image". The mask shows which pixels you can edit (white = floor) vs must preserve (black = everything else).
 
 2. **IDENTIFY & ANALYZE:** Look at the "Reference Image" and identify the key furniture pieces:
    - What is the primary furniture? (e.g., bed, sofa, dining table)
