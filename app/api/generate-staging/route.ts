@@ -384,14 +384,17 @@ function buildSpatialFoundationLayer(analysis: RoomAnalysis): string {
   if (doors > 0 && doorDetails.length > 0) {
     doorInfo = doorDetails.map((door, idx) =>
       `- Door ${idx + 1}: ${door.location} - ${door.type} door (${door.state})
-  → FORBIDDEN ZONE: 36" (3 feet) clearance in front
-  → RULE: NO furniture within this zone
+  → ⛔ ABSOLUTELY FORBIDDEN: DO NOT cover, hide, or block this door
+  → ⛔ ABSOLUTELY FORBIDDEN: DO NOT place furniture in front of this door
+  → FORBIDDEN ZONE: 36" (3 feet) clearance in front - MUST remain completely empty
   ${door.state === 'open' ? '  → EXTRA CAUTION: Door is OPEN - requires wider swing clearance' : ''}`
     ).join('\n');
   } else if (doors > 0) {
     doorInfo = `- ${doors} door(s) detected in this room
+  → ⛔ ABSOLUTELY FORBIDDEN: DO NOT cover, hide, or block ANY of these ${doors} doors
+  → ⛔ ABSOLUTELY FORBIDDEN: DO NOT place furniture in front of ANY door
   → FORBIDDEN ZONE: 36" (3 feet) clearance in front of EACH door
-  → RULE: Identify door locations in image and keep ALL clear`;
+  → RULE: First identify ALL ${doors} door locations in the image, then keep them 100% visible and clear`;
   } else {
     // Fallback to feature detection
     const doorFeatures = features.filter(f =>
@@ -400,8 +403,8 @@ function buildSpatialFoundationLayer(analysis: RoomAnalysis): string {
       f.toLowerCase().includes('archway')
     );
     doorInfo = doorFeatures.length > 0
-      ? doorFeatures.map(f => `- ${f}\n  → FORBIDDEN ZONE: 36" (3 feet) clearance\n  → RULE: NO furniture in this zone`).join('\n')
-      : `- Assume 1-2 doorways exist (standard for ${analysis.roomType})\n  → FORBIDDEN ZONE: 36" clearance in front of all doors\n  → RULE: Identify door locations in image and keep clear`;
+      ? doorFeatures.map(f => `- ${f}\n  → ⛔ DO NOT cover or block this opening\n  → FORBIDDEN ZONE: 36" clearance - MUST remain empty`).join('\n')
+      : `- Assume 1-2 doorways exist (standard for ${analysis.roomType})\n  → ⛔ DO NOT cover or block ANY doors\n  → FORBIDDEN ZONE: 36" clearance in front of all doors\n  → RULE: Identify door locations in image first, keep them 100% visible`;
   }
 
   // Detect windows
@@ -431,11 +434,17 @@ ${features.length > 0
   : '- All walls, ceilings, floors (DO NOT MODIFY)\n- Any built-in features visible in image'
 }
 
-🚨 CRITICAL SPATIAL RULES:
-✓ All doorways, archways, and passages must have 36" minimum clearance
-✓ Windows must NOT be blocked by furniture
-✓ Traffic paths must be clear and unobstructed
-✓ Identify these zones in the image FIRST before placing any furniture
+🚨 CRITICAL SPATIAL RULES (VIOLATION = FAILURE):
+⛔ STEP 1: Identify ALL ${doors} door(s) in the image - look at the image carefully and locate each door
+⛔ STEP 2: Identify ALL ${windows} window(s) in the image - locate each window
+⛔ STEP 3: DO NOT cover, hide, or block ANY of these doors or windows with furniture
+✓ STEP 4: Only THEN place furniture in the remaining open floor space
+✓ All doorways and passages MUST have 36" minimum clearance (completely empty)
+✓ Windows MUST remain 100% visible (no tall furniture in front)
+✓ Traffic paths MUST be clear and unobstructed
+✓ Every door MUST be fully visible in the final staged image
+
+⚠️ COMMON MISTAKE TO AVOID: Do not place a dresser, wardrobe, bed, or any furniture that would cover a door or closet door.
 `;
 }
 
@@ -711,11 +720,23 @@ function buildStandardStagingPrompt(
 
 TASK: Add staged furniture to this empty room image while preserving ALL architectural elements.
 
-⚠️ CRITICAL: You MUST preserve the original architecture 100%:
-- DO NOT modify walls, ceilings, floors, baseboards, trim
-- DO NOT modify windows, doors, or door frames
-- DO NOT modify built-in features (closets, shelving)
-- ONLY add furniture, rugs, and decor items
+🚨🚨🚨 CRITICAL PRESERVATION RULES 🚨🚨🚨
+BEFORE placing ANY furniture, you MUST:
+1. IDENTIFY all doors in the image (including closet doors)
+2. IDENTIFY all windows in the image
+3. KEEP these areas 100% VISIBLE and UNOBSTRUCTED
+
+⛔ ABSOLUTELY FORBIDDEN:
+❌ DO NOT cover, hide, or block ANY doors (regular doors OR closet doors)
+❌ DO NOT place furniture in front of doors or door openings
+❌ DO NOT cover windows with tall furniture
+❌ DO NOT modify walls, ceilings, floors, baseboards, trim, door frames
+❌ DO NOT modify built-in features (closets, shelving, architectural elements)
+
+✅ YOU MAY ONLY:
+✓ Add furniture to the floor (keeping it away from doors)
+✓ Add rugs to the floor
+✓ Add decor items (art, plants, lamps)
 
 --- STAGING INSTRUCTIONS ---
 - ROOM: ${body.analysis.roomType}
@@ -757,7 +778,14 @@ Every piece of furniture MUST have these 3 shadow types:
 
 Focus on creating beautiful, realistic staging with hyper-realistic shadows integrated into the scene.
 
-REMEMBER: Preserve all existing architecture. Only add furniture and decor items.
+🚨 FINAL REMINDER - READ THIS BEFORE GENERATING:
+1. This room has ${body.analysis.doors || 0} door(s) - DO NOT cover, hide, or block ANY of them
+2. All ${body.analysis.doors || 0} doors MUST be 100% visible in the final staged image
+3. COMMON MISTAKE: Placing a dresser/wardrobe that covers a closet door = FAILURE
+4. Look at the original image, identify where each door is located, keep those areas completely clear
+5. Only add furniture to the open floor space that is NOT near any doors
+
+REMEMBER: Preserve all existing architecture. Only add furniture and decor items to open floor space.
 `;
 }
 
