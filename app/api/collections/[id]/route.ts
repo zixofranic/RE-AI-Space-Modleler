@@ -6,13 +6,13 @@ export const dynamic = 'force-dynamic';
 // GET /api/collections/[id] - Get a specific collection with its images
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   if (!isSupabaseConfigured()) {
     return NextResponse.json({ error: 'Supabase not configured' }, { status: 500 });
   }
 
-  const { id } = params;
+  const { id } = await params;
 
   try {
     // Get collection details
@@ -52,13 +52,13 @@ export async function GET(
 // DELETE /api/collections/[id] - Delete a collection
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   if (!isSupabaseConfigured()) {
     return NextResponse.json({ error: 'Supabase not configured' }, { status: 500 });
   }
 
-  const { id } = params;
+  const { id } = await params;
 
   try {
     const { error } = await supabase.from('collections').delete().eq('id', id);

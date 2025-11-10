@@ -6,13 +6,13 @@ export const dynamic = 'force-dynamic';
 // GET /api/projects/[id] - Get a specific project
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   if (!isSupabaseConfigured()) {
     return NextResponse.json({ error: 'Supabase not configured' }, { status: 500 });
   }
 
-  const { id } = params;
+  const { id } = await params;
 
   try {
     const { data: project, error } = await supabase
