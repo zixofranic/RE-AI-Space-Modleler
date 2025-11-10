@@ -25,6 +25,10 @@ interface GenerateRequest {
  */
 async function generateFloorMask(imageBase64: string, mimeType: string, imageId: string, analysis: RoomAnalysis, projectId?: string): Promise<string> {
   try {
+    console.log('🎭 MASK GENERATION - Starting...');
+    console.log(`📊 Input: imageId=${imageId}, mimeType=${mimeType}, base64Length=${imageBase64.length}`);
+    console.log(`📊 Analysis: roomType=${analysis.roomType}, doors=${analysis.doors || 0}, windows=${analysis.windows || 0}`);
+
     const model = genAI.getGenerativeModel({
       model: 'gemini-2.5-flash-image'
     });
@@ -52,6 +56,7 @@ COLOR RULES:
 This is a data file, not a photo. Generate a pure binary mask.
 `;
 
+    console.log('🎭 MASK GENERATION - Sending request to gemini-2.5-flash-image...');
     const result = await model.generateContent({
       contents: [{
         role: 'user',
@@ -70,13 +75,18 @@ This is a data file, not a photo. Generate a pure binary mask.
     const response = await result.response;
     const candidates = response.candidates;
 
+    console.log(`🎭 MASK GENERATION - Response received, candidates=${candidates?.length || 0}`);
+
     if (candidates && candidates.length > 0 && candidates[0].content) {
       const parts = candidates[0].content.parts;
       const imagePart = parts.find((part: any) => part.inlineData);
 
+      console.log(`🎭 MASK GENERATION - Found ${parts.length} parts, imagePart=${!!imagePart}`);
+
       if (imagePart && imagePart.inlineData) {
         const maskData = imagePart.inlineData.data;
-        console.log('✅ Floor mask generated successfully');
+        const maskMimeType = imagePart.inlineData.mimeType;
+        console.log(`✅ MASK GENERATION - Success! mimeType=${maskMimeType}, dataLength=${maskData.length}`);
 
         // DEBUG: Save mask to Supabase for inspection
         if (isSupabaseConfigured() && projectId) {
@@ -171,10 +181,17 @@ STAGING REQUIREMENTS:
 The mask protects all architectural elements. Focus on beautiful staging within the allowed white floor area.
 `;
 
+    console.log('📝 STAGING PROMPT:');
+    console.log('=====================================');
+    console.log(inpaintingPrompt);
+    console.log('=====================================');
+    console.log(`📊 Prompt info: doors=${doors}, windows=${windows}, roomType=${body.analysis.roomType}, style=${settings.designStyle || 'modern'}`);
+
     // ============================================================================
     // STEP 3: Staging with mask (3-part API call)
     // ============================================================================
     console.log('🎨 Step 3: Generating staged image with mask (3-part)...');
+    console.log(`🎨 Sending to gemini-2.5-flash-image: prompt + image + mask`);
 
     const parts: any[] = [
       { text: inpaintingPrompt },
@@ -203,25 +220,36 @@ The mask protects all architectural elements. Focus on beautiful staging within 
 
     const response = await result.response;
 
+    console.log('🎨 STAGING - Response received');
+
     // Check if response contains generated image
     const candidates = response.candidates;
     let stagedImageUrl = body.imageDataUrl; // Fallback to original
 
+    console.log(`🎨 STAGING - Candidates: ${candidates?.length || 0}`);
+
     if (candidates && candidates.length > 0 && candidates[0].content) {
       const parts = candidates[0].content.parts;
+      console.log(`🎨 STAGING - Parts in response: ${parts.length}`);
 
       // Look for inline data (generated image)
       const imagePart = parts.find((part: any) => part.inlineData);
+      console.log(`🎨 STAGING - Found image part: ${!!imagePart}`);
 
       if (imagePart && imagePart.inlineData) {
         // Convert generated image to data URL
         const generatedMimeType = imagePart.inlineData.mimeType || 'image/jpeg';
         const generatedData = imagePart.inlineData.data;
 
+        console.log(`✅ STAGING - Success! Generated image: mimeType=${generatedMimeType}, dataLength=${generatedData.length}`);
+
         // Return data URL - the store's setStagingResult will handle Supabase upload
         stagedImageUrl = `data:${generatedMimeType};base64,${generatedData}`;
-        console.log('✅ Staged image generated successfully with realistic shadows');
+      } else {
+        console.warn('⚠️ STAGING - No image in response, using fallback (original image)');
       }
+    } else {
+      console.warn('⚠️ STAGING - No candidates in response, using fallback (original image)');
     }
 
     // Also get text description if available
