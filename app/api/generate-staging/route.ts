@@ -129,10 +129,11 @@ export async function POST(request: NextRequest) {
     const mimeType = getMimeType(body.imageDataUrl);
 
     // ============================================================================
-    // STEP 1: Generate floor mask for inpainting
+    // STEP 1: MASK GENERATION DISABLED
     // ============================================================================
-    console.log('🎭 Step 1: Generating floor mask...');
-    const maskBase64 = await generateFloorMask(imageBase64, mimeType, body.imageId, body.analysis, body.analysis.projectId);
+    // Mask generation removed - gemini-2.5-flash-image cannot do binary segmentation
+    // Relying on spatial prompts and door detection in Layer 1 instead
+    console.log('ℹ️ Step 1: Skipping mask generation (disabled)');
 
     // Merge settings with global settings
     const settings = {
@@ -169,12 +170,12 @@ ${body.projectStyleGuide.greeneryType ? `- GREENERY: ${body.projectStyleGuide.gr
       : buildStandardStagingPrompt(body, settings, styleGuideSection, layer2, layer3);
 
     // ============================================================================
-    // STEP 3: Inpainting API call (3-part with mask, or 4-part with reference image)
+    // STEP 3: Staging API call (2-part: prompt + image, or 3-part with reference image)
     // ============================================================================
     const hasReferenceImage = !!body.referenceImageUrl;
     console.log(hasReferenceImage
-      ? '🧪 Step 3: Generating with VISUAL SPATIAL CONSISTENCY (4-part API call)...'
-      : '🎨 Step 3: Generating staged image with mask-based inpainting (3-part)...'
+      ? '🧪 Step 3: Generating with VISUAL SPATIAL CONSISTENCY (3-part API call)...'
+      : '🎨 Step 3: Generating staged image with prompt-based staging (2-part)...'
     );
 
     const parts: any[] = [
@@ -185,15 +186,9 @@ ${body.projectStyleGuide.greeneryType ? `- GREENERY: ${body.projectStyleGuide.gr
           data: imageBase64,
         },
       },
-      {
-        inlineData: {
-          mimeType: 'image/png',
-          data: maskBase64,
-        },
-      },
     ];
 
-    // 🧪 Add reference image as 4th part if spatial consistency is enabled
+    // 🧪 Add reference image as 3rd part if spatial consistency is enabled
     if (hasReferenceImage && body.referenceImageUrl) {
       console.log('🔗 Adding reference image for visual spatial consistency...');
       const refImageBase64 = await dataUrlToBase64(body.referenceImageUrl);
@@ -205,7 +200,7 @@ ${body.projectStyleGuide.greeneryType ? `- GREENERY: ${body.projectStyleGuide.gr
           data: refImageBase64,
         },
       });
-      console.log('✅ Reference image added as 4th part');
+      console.log('✅ Reference image added as 3rd part');
     }
 
     const result = await model.generateContent({
@@ -714,8 +709,13 @@ function buildStandardStagingPrompt(
 ): string {
   return `You are a professional virtual staging AI.
 
-TASK: Fill the white-masked area of the original image with staged furniture.
-All black-masked areas MUST remain 100% identical to the original image.
+TASK: Add staged furniture to this empty room image while preserving ALL architectural elements.
+
+⚠️ CRITICAL: You MUST preserve the original architecture 100%:
+- DO NOT modify walls, ceilings, floors, baseboards, trim
+- DO NOT modify windows, doors, or door frames
+- DO NOT modify built-in features (closets, shelving)
+- ONLY add furniture, rugs, and decor items
 
 --- STAGING INSTRUCTIONS ---
 - ROOM: ${body.analysis.roomType}
@@ -755,7 +755,9 @@ Every piece of furniture MUST have these 3 shadow types:
    - Add depth under tables, behind furniture
    - Darken inside shelving units
 
-The mask defines the editable area. Focus on creating beautiful, realistic staging with hyper-realistic shadows integrated into the scene.
+Focus on creating beautiful, realistic staging with hyper-realistic shadows integrated into the scene.
+
+REMEMBER: Preserve all existing architecture. Only add furniture and decor items.
 `;
 }
 
@@ -767,17 +769,16 @@ function buildSpatialConsistencyPrompt(
   settings: Partial<DesignSettings>,
   styleGuideSection: string
 ): string {
-  return `You are a spatial consistency AI. You will be given FOUR inputs:
-1. A "Reference Image" (a staged room) - THE LAST IMAGE
-2. A "Target Image" (the *same room* from a different angle, but empty) - IMAGE 2
-3. A "Mask" (defining the editable floor area of the Target Image) - IMAGE 3
-4. This text prompt
+  return `You are a spatial consistency AI. You will be given THREE inputs:
+1. This text prompt
+2. A "Target Image" (an empty room from a new angle) - IMAGE 1
+3. A "Reference Image" (the *same room* staged with furniture from a different angle) - IMAGE 2
 
 TASK:
 Stage the "Target Image" by "transferring" the furniture from the "Reference Image" into the new perspective.
 
 CRITICAL RULES:
-1. **PRESERVE TARGET ARCHITECTURE:** Use the "Mask" to preserve all walls, windows, doors, and architecture of the "Target Image". The mask shows which pixels you can edit (white) vs must preserve (black).
+1. **PRESERVE TARGET ARCHITECTURE:** Preserve all walls, windows, doors, and architecture of the "Target Image". DO NOT modify the room structure, ONLY add furniture.
 
 2. **IDENTIFY & ANALYZE:** Look at the "Reference Image" and identify the key furniture pieces:
    - What is the primary furniture? (e.g., bed, sofa, dining table)
