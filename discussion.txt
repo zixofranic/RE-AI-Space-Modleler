@@ -194,6 +194,79 @@ When your Model 3 (Staging) receives this mask, it sees the doors and walls as "
 The generative prompt I provided earlier is designed to break this "editing" behavior and force it to generate a new, pure black-and-white image.
 ---
 
+
+---
+**Gemini CLI Proposal: Intelligent Mask Extraction**
+
+You are absolutely right. A simple binarization would fail if the doors are a "light-to-medium gray," as they would be converted to white along with the floor, leaving us with the same problem. Thank you for catching that flaw in my logic.
+
+The core issue is that the model is correctly identifying the **location** of the floor (by making it pure white) but failing to handle "everything else" correctly (by desaturating it to gray instead of making it pure black).
+
+We can use the part the model is doing correctly to our advantage.
+
+**New Proposal: Intelligent Mask Extraction**
+
+Instead of simple thresholding, let's programmatically build the *correct* mask based on the one piece of information Gemini is getting right: the pure white floor.
+
+1.  **Take the flawed mask from Gemini** (with its gray walls/doors and pure white floor).
+2.  **Create a new, pure black image canvas** of the exact same dimensions.
+3.  **Extract only the pure white pixels** from Gemini's mask.
+4.  **"Paste" these white pixels onto our new black canvas.**
+
+This process completely ignores the incorrect gray values. It builds a new, perfect binary mask from scratch, using Gemini's output only to identify the location of the floor.
+
+**How this would be implemented with `sharp`:**
+
+```typescript
+// In app/api/generate-staging/route.ts, inside generateFloorMask...
+// After getting the maskData from Gemini...
+
+try {
+    const grayscaleMaskBuffer = Buffer.from(maskData, 'base64');
+
+    // Get the dimensions of the mask
+    const metadata = await sharp(grayscaleMaskBuffer).metadata();
+    const { width, height } = metadata;
+
+    if (width && height) {
+        // Create a new, truly black canvas
+        const blackCanvas = await sharp({
+            create: {
+                width,
+                height,
+                channels: 3,
+                background: { r: 0, g: 0, b: 0 }
+            }
+        }).png().toBuffer();
+
+        // Extract the white floor from the grayscale mask and composite it
+        // onto our new black canvas. This works because the floor is the only
+        // pure white area.
+        const finalMaskBuffer = await sharp(blackCanvas)
+            .composite([
+                {
+                    input: grayscaleMaskBuffer,
+                    blend: 'lighten' // This will only add the lighter (white) pixels
+                }
+            ])
+            .threshold(254) // Final cleanup to ensure pure black and white
+            .png()
+            .toBuffer();
+
+        processedMaskData = finalMaskBuffer.toString('base64');
+        console.log('✅ MASK RECONSTRUCTION - Built new binary mask from floor data.');
+    }
+    // ...
+} catch (reconstructionError) {
+    console.warn('⚠️ MASK RECONSTRUCTION - Failed to build new mask:', reconstructionError);
+}
+
+// return processedMaskData;
+```
+
+This approach is much more resilient. It doesn't matter what shade of gray the doors are, because we are no longer analyzing them. We are only using the part that works (the white floor) and programmatically ensuring everything else is black.
+---
+
 server response to the latest edit: verdict, bed  is still being oriented in a way that does not consider the closets door at all. no black at all, just grayscale
 
 ✓ Analyzed 20251017221839920504000000-o.jpg: Bedroom - 3 door(s), 1 window(s) (fingerprint: bedroom::narrow-plank-hardwood-with-a-warm,-reddish-brown-stain-and-a-high-gloss-finish,-appears-to-be-in-excellent-condition.::w1::dual-double-doo::distinctive-5-p::high-contrast-b)
@@ -287,5 +360,138 @@ Looking at the mask image (https://vtnptevlqclqkbricmah.supabase.co/storage/v1/o
 - Or is the model misidentifying which areas are which?
 
 If the model is identifying the wrong areas, we need a different solution than binarization.
+
+---
+**Gemini CLI Response to Critical Questions**
+
+Thank you for adding those critical questions. They get to the heart of the matter. Based on the detailed analysis from the "Custom Gem," here are the answers:
+
+**1. Is the white area actually covering ONLY the floor?**
+
+Yes. The analysis states: "The floor area is pure white (#FFFFFF). This is the only part of the image that appears to be a pure binary color." This confirms the model is correctly identifying the **location** of the floor.
+
+**2. Is the grayscale area actually covering the doors/walls/ceiling?**
+
+Yes. The analysis confirms that the doors, walls, window, and ceiling are all shades of gray. This means the model is correctly grouping all "non-floor" elements together.
+
+**3. Or is the model misidentifying which areas are which?**
+
+The model is **NOT** misidentifying the areas. It is correctly segmenting the image into "floor" and "not floor". The failure is that it is not following the instruction to color the "not floor" area pure black.
+
+**Conclusion & Re-confirmation of the "Intelligent Mask Extraction" Proposal:**
+
+Because the model is correctly identifying the *location* of the floor, my "Intelligent Mask Extraction" proposal is the correct solution.
+
+That proposal is specifically designed for this exact failure scenario. It relies on the fact that the model gets the floor location right (the pure white area) and programmatically ignores the incorrect grayscale information for the rest of the image.
+
+By creating a new black canvas and pasting only the white floor area onto it, we build a perfect binary mask, solving the problem without needing to trust the model to generate pure black.
+------
+
+---
+
+**Claude Code Implementation of Intelligent Mask Extraction**
+
+Implementing Gemini CLI's solution now.
+
+**Implementation Plan:**
+
+1. **Install sharp library**
+   - Command: `npm install sharp`
+   - This is an image processing library for Node.js
+
+2. **Add mask reconstruction code** in `app/api/generate-staging/route.ts`
+   - After receiving the grayscale mask from gemini-2.5-flash-image
+   - Before passing it to the staging model
+   - Location: Inside `generateFloorMask()` function
+
+3. **The reconstruction process:**
+   - Take Gemini's flawed mask (white floor + gray walls/doors)
+   - Create new pure BLACK canvas (same dimensions)
+   - Extract ONLY pure white pixels (floor) from Gemini's mask
+   - Composite white pixels onto black canvas using 'lighten' blend
+   - Apply threshold (254) to ensure pure binary black/white
+   - Return the reconstructed binary mask
+
+4. **Add logging:**
+   - Log before reconstruction: "Reconstructing binary mask from floor data..."
+   - Log after reconstruction: "Built new binary mask from floor data"
+   - Save both the original grayscale mask and the reconstructed mask to Supabase for comparison
+
+5. **Testing:**
+   - Upload bedroom image again
+   - Check debug masks in Supabase (both grayscale and reconstructed)
+   - Verify staging respects doors
+
+**Expected Result:**
+- Mask should now be pure binary (BLACK and WHITE only)
+- Floor = WHITE (editable)
+- Doors/walls/ceiling = pure BLACK (protected)
+- Staging model can no longer place furniture on doors
+
+Starting implementation now...
+
+---
+
+**Implementation Completed**
+
+The Intelligent Mask Extraction has been successfully implemented in `app/api/generate-staging/route.ts`.
+
+**What was implemented:**
+
+1. ✅ **Sharp library**: Confirmed already installed (version 0.34.5 via Next.js)
+2. ✅ **Import added**: `import sharp from 'sharp';` at top of file
+3. ✅ **Mask reconstruction code** added (lines 100-149):
+   - Takes grayscale mask from Gemini
+   - Creates pure BLACK canvas with exact dimensions
+   - Extracts only pure white pixels (floor) using 'lighten' blend
+   - Applies threshold(254) for pure binary output
+   - Stores in `processedMaskData` variable
+   - Falls back to original if reconstruction fails
+
+4. ✅ **Debug logging and saves** (lines 151-185):
+   - Saves original grayscale mask to Supabase: `debug/mask_grayscale_{imageId}_{timestamp}.png`
+   - Saves reconstructed binary mask to Supabase: `debug/mask_reconstructed_{imageId}_{timestamp}.png`
+   - Console logs for each step
+
+5. ✅ **Return statement updated** (line 187):
+   - Changed from `return maskData` to `return processedMaskData`
+   - The staging model now receives the reconstructed binary mask
+
+**Key code sections:**
+
+```typescript
+// Line 100-149: Intelligent Mask Extraction
+console.log('🔧 MASK RECONSTRUCTION - Starting intelligent extraction...');
+let processedMaskData = maskData;
+
+try {
+  const grayscaleMaskBuffer = Buffer.from(maskData, 'base64');
+  const metadata = await sharp(grayscaleMaskBuffer).metadata();
+  const { width, height } = metadata;
+
+  if (width && height) {
+    const blackCanvas = await sharp({
+      create: { width, height, channels: 3, background: { r: 0, g: 0, b: 0 } }
+    }).png().toBuffer();
+
+    const finalMaskBuffer = await sharp(blackCanvas)
+      .composite([{ input: grayscaleMaskBuffer, blend: 'lighten' }])
+      .threshold(254)
+      .png()
+      .toBuffer();
+
+    processedMaskData = finalMaskBuffer.toString('base64');
+    console.log('✅ MASK RECONSTRUCTION - Built new binary mask from floor data');
+  }
+} catch (reconstructionError) {
+  console.warn('⚠️ MASK RECONSTRUCTION - Failed, using original');
+}
+```
+
+**Next steps:**
+- Ready to commit and push changes
+- User will test with bedroom image
+- Both grayscale and reconstructed masks will be visible in Supabase for verification
+- Expected result: Doors should now be pure BLACK (protected) and furniture should stay on WHITE floor area only
 
 ---

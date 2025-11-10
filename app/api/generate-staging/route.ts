@@ -3,6 +3,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { dataUrlToBase64, getMimeType } from '@/lib/utils';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import type { RoomStagingConfig, RoomAnalysis, DesignSettings, ProjectStyleGuide } from '@/types';
+import sharp from 'sharp';
 
 export const maxDuration = 60;
 
@@ -96,25 +97,94 @@ This is a data file, not a photo. Generate a pure binary mask, paying close atte
         const maskMimeType = imagePart.inlineData.mimeType;
         console.log(`✅ MASK GENERATION - Success! mimeType=${maskMimeType}, dataLength=${maskData.length}`);
 
-        // DEBUG: Save mask to Supabase for inspection
+        // ============================================================================
+        // INTELLIGENT MASK EXTRACTION: Reconstruct binary mask from floor data
+        // ============================================================================
+        console.log('🔧 MASK RECONSTRUCTION - Starting intelligent extraction...');
+        let processedMaskData = maskData; // Default to original if reconstruction fails
+
+        try {
+          const grayscaleMaskBuffer = Buffer.from(maskData, 'base64');
+
+          // Get the dimensions of the mask
+          const metadata = await sharp(grayscaleMaskBuffer).metadata();
+          const { width, height } = metadata;
+
+          console.log(`🔧 MASK RECONSTRUCTION - Original mask dimensions: ${width}x${height}`);
+
+          if (width && height) {
+            // Create a new, truly black canvas
+            const blackCanvas = await sharp({
+              create: {
+                width,
+                height,
+                channels: 3,
+                background: { r: 0, g: 0, b: 0 }
+              }
+            }).png().toBuffer();
+
+            console.log('🔧 MASK RECONSTRUCTION - Created pure black canvas');
+
+            // Extract the white floor from the grayscale mask and composite it
+            // onto our new black canvas. This works because the floor is the only
+            // pure white area.
+            const finalMaskBuffer = await sharp(blackCanvas)
+              .composite([
+                {
+                  input: grayscaleMaskBuffer,
+                  blend: 'lighten' // This will only add the lighter (white) pixels
+                }
+              ])
+              .threshold(254) // Final cleanup to ensure pure black and white
+              .png()
+              .toBuffer();
+
+            processedMaskData = finalMaskBuffer.toString('base64');
+            console.log('✅ MASK RECONSTRUCTION - Built new binary mask from floor data');
+            console.log(`✅ MASK RECONSTRUCTION - Final mask size: ${processedMaskData.length} bytes`);
+          }
+        } catch (reconstructionError) {
+          console.warn('⚠️ MASK RECONSTRUCTION - Failed to build new mask:', reconstructionError);
+          console.warn('⚠️ MASK RECONSTRUCTION - Falling back to original grayscale mask');
+        }
+
+        // DEBUG: Save ORIGINAL grayscale mask to Supabase for comparison
         if (isSupabaseConfigured() && projectId) {
           try {
             const maskBlob = new Blob([
               Uint8Array.from(atob(maskData), c => c.charCodeAt(0))
             ], { type: 'image/png' });
 
-            const debugPath = `${projectId}/debug/mask_${imageId}_${Date.now()}.png`;
+            const debugPath = `${projectId}/debug/mask_grayscale_${imageId}_${Date.now()}.png`;
             await supabase.storage
               .from('staged-images')
               .upload(debugPath, maskBlob, { upsert: true });
 
-            console.log(`🐛 DEBUG: Mask saved to staged-images/${debugPath}`);
+            console.log(`🐛 DEBUG: Grayscale mask saved to staged-images/${debugPath}`);
           } catch (debugError) {
-            console.warn('⚠️ Could not save debug mask:', debugError);
+            console.warn('⚠️ Could not save grayscale debug mask:', debugError);
           }
         }
 
-        return maskData; // Return base64 mask
+        // DEBUG: Save RECONSTRUCTED mask to Supabase for inspection
+        if (isSupabaseConfigured() && projectId) {
+          try {
+            const maskBlob = new Blob([
+              Uint8Array.from(atob(processedMaskData), c => c.charCodeAt(0))
+            ], { type: 'image/png' });
+
+            const debugPath = `${projectId}/debug/mask_reconstructed_${imageId}_${Date.now()}.png`;
+            await supabase.storage
+              .from('staged-images')
+              .upload(debugPath, maskBlob, { upsert: true });
+
+            console.log(`🐛 DEBUG: Reconstructed mask saved to staged-images/${debugPath}`);
+          } catch (debugError) {
+            console.warn('⚠️ Could not save reconstructed debug mask:', debugError);
+          }
+        }
+
+        return processedMaskData; // Return the reconstructed binary mask
       }
     }
 
