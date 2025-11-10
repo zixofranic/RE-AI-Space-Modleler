@@ -33,16 +33,24 @@ async function generateFloorMask(imageBase64: string, mimeType: string, imageId:
       model: 'gemini-2.5-flash-image'
     });
 
+    const doors = analysis.doors || 0;
+    const windows = analysis.windows || 0;
+
     const maskPrompt = `
 You are a technical segmentation tool. Your sole task is to generate a new, binary, black-and-white mask based on the provided photo.
 
 Do NOT edit the original photo. You must CREATE A NEW image.
 
+ROOM ANALYSIS:
+- This photo contains a ${analysis.roomType}.
+- I have detected ${doors} door(s).
+- I have detected ${windows} window(s).
+
 TASK:
 1. Start with a new, blank image that is pure BLACK (#000000).
-2. Analyze the provided photo to find the floor area (the carpet, hardwood, or tile).
+2. Analyze the provided photo to find the floor area.
 3. Paint ONLY the pixels corresponding to the floor area PURE WHITE (#FFFFFF).
-4. The final output must be this new 2-color (black and white) mask.
+4. It is CRITICAL that the ${doors} door(s) and ${windows} window(s) remain BLACK.
 
 OUTPUT REQUIREMENTS:
 - The output MUST be a binary black-and-white image.
@@ -51,9 +59,9 @@ OUTPUT REQUIREMENTS:
 
 COLOR RULES:
 - WHITE (#FFFFFF): Only the floor surface (carpet, hardwood, tile).
-- BLACK (#000000): Everything else (walls, doors, windows, ceiling, ceiling fan, trim, baseboards, etc.).
+- BLACK (#000000): Everything else. This MUST include all walls, the ${doors} door(s), the ${windows} window(s), the ceiling, any trim, and baseboards.
 
-This is a data file, not a photo. Generate a pure binary mask.
+This is a data file, not a photo. Generate a pure binary mask, paying close attention to the room analysis data provided.
 `;
 
     console.log('🎭 MASK GENERATION - Sending request to gemini-2.5-flash-image...');

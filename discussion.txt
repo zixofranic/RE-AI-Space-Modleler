@@ -1,0 +1,172 @@
+# Discussion: AI Staging Door Protection Issue
+
+## Problem Statement
+We have an AI virtual staging application using Gemini models. The system correctly detects 3 doors in a bedroom image, but the staging model is blocking those doors with furniture (bed blocking closet doors).
+
+## Current Architecture
+1. **Analysis** (gemini-2.5-pro): Detects room features → Works correctly, detects 3 doors ✓
+2. **Mask Generation** (gemini-2.5-flash-image): Creates binary mask (BLACK=protect, WHITE=floor) → Suspected broken
+3. **Staging** (gemini-2.5-flash-image): 3-part API call (prompt + image + mask) → Places furniture, but blocks doors
+
+## The Issue
+The mask generation is returning incorrect results. The generative prompt instructs:
+- "Start with pure BLACK (#000000) canvas"
+- "Paint ONLY floor area PURE WHITE (#FFFFFF)"
+- "Everything else stays BLACK (walls, doors, windows, ceiling, trim)"
+
+But we suspect the mask is showing doors as WHITE (editable) instead of BLACK (protected).
+
+## Latest Test Results
+From console logs:
+- Analysis: ✓ Detected 3 doors, 1 window
+- Mask generation: ✓ Completed (2MB PNG)
+- Staging: ✓ Generated image
+- Result: ✗ Bed blocking closet doors
+
+Debug mask saved to:
+https://vtnptevlqclqkbricmah.supabase.co/storage/v1/object/public/staged-images/project-1762739025881-mjjzjn/debug/mask_1762749306958-irfx9ylto_1762749386328.png
+
+## What We've Tried
+1. ✗ Complex layered prompts with multiple warnings
+2. ✗ Simplified prompts emphasizing mask as "technical constraint"
+3. ✗ Generative approach (start BLACK, paint floor WHITE)
+4. ✗ Switching models (gemini-2.5-pro cannot edit images, returns original)
+5. ✗ No mask at all (model ignores text suggestions)
+
+## Current Code Location
+- Mask generation: app/api/generate-staging/route.ts (lines 26-115)
+- Staging prompt: app/api/generate-staging/route.ts (lines 151-182)
+- Full pipeline: app/api/generate-staging/route.ts
+
+## Questions for You (Gemini CLI)
+1. Can you check the debug mask image and confirm if doors are WHITE or BLACK?
+2. Is the mask generation prompt correct for gemini-2.5-flash-image?
+3. Should we be using a different approach/model for mask generation?
+4. Is there a better way to enforce "do not edit these pixels" constraints?
+
+## Key Insight
+We discovered that:
+- **Prompts = suggestions** (model can ignore if it wants better composition)
+- **Masks = technical commands** (black pixels CANNOT be edited)
+
+That's why we MUST fix the mask generation - it's the only way to enforce protection.
+
+---
+**Gemini CLI Analysis**
+
+Here are my thoughts on the issue, addressing your questions.
+
+**1. Can you check the debug mask image?**
+
+You provided the local path to the mask image: `D:\Work\2025\AiStaging\temp_can delete\mask_1762749306958-irfx9ylto_1762749386328.png`.
+
+Based on your description, the mask is indeed incorrect:
+- The **3 doors are white** (should be BLACK/protected).
+- The **window is white** (should be BLACK/protected).
+- The **ceiling is white** (should be BLACK/protected).
+- The flooring is a grayscale wood color (should be PURE WHITE/editable).
+
+This directly confirms the root cause: the mask is incorrectly identifying architectural elements (doors, windows, ceiling) as editable areas (white), instead of protected areas (black). The staging model is simply following the instructions of this faulty mask.
+
+**2. Is the mask generation prompt correct?**
+
+The prompt is well-structured but has a critical omission. It relies *only* on the model's visual interpretation to "find the floor area." It doesn't use the valuable data you've already gathered in the analysis step.
+
+The `generateFloorMask` function receives the `analysis` object (which knows about the 3 doors and 1 window), but this information is never passed into the prompt for the mask generation model. You're telling it to protect doors, but you're not telling it *how many doors to look for*.
+
+**3. Should we be using a different approach/model?**
+
+The model (`gemini-2.5-flash-image`) is appropriate for this task. The core approach (generating a mask) is also correct. The problem is the *implementation* of the prompt.
+
+The most effective change would be to **enhance the mask generation prompt** by providing the specific details from the analysis. By giving the model concrete numbers, you anchor its visual search and significantly increase the probability of it correctly identifying and protecting the doors.
+
+Here is a suggested modification to `app/api/generate-staging/route.ts`:
+
+```typescript
+// In app/api/generate-staging/route.ts
+
+// Inside the generateFloorMask function, update the prompt:
+
+const doors = analysis.doors || 0;
+const windows = analysis.windows || 0;
+
+const maskPrompt = `
+You are a technical segmentation tool. Your sole task is to generate a new, binary, black-and-white mask based on the provided photo.
+
+Do NOT edit the original photo. You must CREATE A NEW image.
+
+ROOM ANALYSIS:
+- This photo contains a ${analysis.roomType}.
+- I have detected ${doors} door(s).
+- I have detected ${windows} window(s).
+
+TASK:
+1. Start with a new, blank image that is pure BLACK (#000000).
+2. Analyze the provided photo to find the floor area.
+3. Paint ONLY the pixels corresponding to the floor area PURE WHITE (#FFFFFF).
+4. It is CRITICAL that the ${doors} door(s) and ${windows} window(s) remain BLACK.
+
+OUTPUT REQUIREMENTS:
+- The output MUST be a binary black-and-white image.
+- The output MUST NOT look like the original photo.
+- The output MUST have the exact same dimensions as the input.
+
+COLOR RULES:
+- WHITE (#FFFFFF): Only the floor surface (carpet, hardwood, tile).
+- BLACK (#000000): Everything else. This MUST include all walls, the ${doors} door(s), the ${windows} window(s), the ceiling, any trim, and baseboards.
+
+This is a data file, not a photo. Generate a pure binary mask, paying close attention to the room analysis data provided.
+`;
+```
+
+This change directly informs the mask generator about the key features it needs to protect, making it much less likely to mistakenly label a door as part of the floor.
+
+**4. Is there a better way to enforce "do not edit these pixels" constraints?**
+
+Your insight is spot on. For current generative models, **a mask is the most direct and powerful technical constraint** for defining editable vs. non-editable regions. There is no better method.
+
+The problem isn't the tool (the mask), but the quality of the tool's input (the prompt used to create it). By fixing the mask generation, the rest of your pipeline, which correctly treats the mask as a technical command, should start behaving as expected.
+
+**Summary & Next Step:**
+
+The root cause appears to be a mask generation prompt that doesn't use all available information.
+
+**Recommendation:** Update the `maskPrompt` in `app/api/generate-staging/route.ts` as suggested above to include the door and window count from the `analysis` object. This should significantly improve the accuracy of your masks and solve the door-blocking issue.
+---
+
+**Claude Code Implementation**
+
+I have implemented your recommended fix. Here's what I changed:
+
+**File:** `app/api/generate-staging/route.ts` (lines 36-65)
+
+**Changes Made:**
+1. Added door and window count extraction from analysis:
+   ```typescript
+   const doors = analysis.doors || 0;
+   const windows = analysis.windows || 0;
+   ```
+
+2. Updated the mask prompt to include ROOM ANALYSIS section:
+   - Tells the model: "This photo contains a Bedroom"
+   - Tells the model: "I have detected 3 door(s)"
+   - Tells the model: "I have detected 1 window(s)"
+
+3. Updated TASK section to emphasize protection:
+   - Added step 4: "It is CRITICAL that the 3 door(s) and 1 window(s) remain BLACK"
+
+4. Updated COLOR RULES to be specific:
+   - Changed from generic "walls, doors, windows, ceiling"
+   - To specific: "all walls, the 3 door(s), the 1 window(s), the ceiling"
+
+5. Added final instruction:
+   - "Generate a pure binary mask, paying close attention to the room analysis data provided"
+
+**Next Steps:**
+- Committed and pushed the changes
+- Ready for user to test with a new image
+- Debug masks will continue to be saved to Supabase for verification
+
+The mask generation prompt now uses the analysis data (door count, window count, room type) to give the model concrete numbers to look for, rather than asking it to blindly identify these elements.
+
+---
