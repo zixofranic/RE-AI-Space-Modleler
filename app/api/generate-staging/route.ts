@@ -120,18 +120,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Use Gemini 2.5 Pro for simple edit mode
+    // Use Gemini 2.5 Flash Image for staging
     const model = genAI.getGenerativeModel({
-      model: 'gemini-2.5-pro'
+      model: 'gemini-2.5-flash-image'
     });
 
     const imageBase64 = await dataUrlToBase64(body.imageDataUrl);
     const mimeType = getMimeType(body.imageDataUrl);
 
     // ============================================================================
-    // STEP 1: MASK DISABLED - Using simple edit mode
+    // STEP 1: Generate floor mask for inpainting
     // ============================================================================
-    console.log('ℹ️ Step 1: Mask generation disabled - using simple edit mode');
+    console.log('🎭 Step 1: Generating floor mask...');
+    const maskBase64 = await generateFloorMask(imageBase64, mimeType, body.imageId, body.analysis, body.analysis.projectId);
 
     // Merge settings with global settings
     const settings = {
@@ -140,28 +141,40 @@ export async function POST(request: NextRequest) {
     };
 
     // ============================================================================
-    // STEP 2: Build simple edit prompt
+    // STEP 2: Build staging prompt with mask instructions
     // ============================================================================
-    console.log('📝 Step 2: Building simple edit prompt...');
+    console.log('📝 Step 2: Building staging prompt...');
 
     const doors = body.analysis.doors || 0;
     const windows = body.analysis.windows || 0;
 
-    const inpaintingPrompt = `Edit this image to stage the ${body.analysis.roomType} with ${settings.designStyle || 'modern'} furniture.
+    const inpaintingPrompt = `You are a professional virtual staging AI.
 
-IMPORTANT RULES:
-- This room has ${doors} door(s) - DO NOT cover, hide, or remove ANY doors
-- This room has ${windows} window(s) - DO NOT block windows with furniture
-- Keep all architectural elements (walls, floors, ceilings) unchanged
-- Only add furniture and decor to the empty floor space
+TASK: Fill the white-masked area of this image with staged furniture.
+The mask (third image) shows which pixels you can edit:
+- BLACK pixels = FORBIDDEN - you CANNOT edit (walls, doors, windows, ceiling)
+- WHITE pixels = ALLOWED - you CAN edit (floor only)
 
-Add appropriate furniture for a ${body.analysis.roomType} in ${settings.designStyle || 'modern'} style with ${settings.colorPalette || 'neutral'} colors.
+This is a TECHNICAL CONSTRAINT - black pixels are locked and cannot be modified.
+
+ROOM INFORMATION:
+- Room type: ${body.analysis.roomType}
+- Detected ${doors} door(s) - these are BLACK in the mask (protected)
+- Detected ${windows} window(s) - these are BLACK in the mask (protected)
+
+STAGING REQUIREMENTS:
+- Style: ${settings.designStyle || 'modern'}
+- Color palette: ${settings.colorPalette || 'neutral colors'}
+- Add appropriate furniture ONLY to the WHITE floor area
+- Create realistic shadows for all furniture
+
+The mask protects all architectural elements. Focus on beautiful staging within the allowed white floor area.
 `;
 
     // ============================================================================
-    // STEP 3: Simple edit mode (2-part: prompt + image)
+    // STEP 3: Staging with mask (3-part API call)
     // ============================================================================
-    console.log('🎨 Step 3: Generating with simple edit mode (2-part API call)...');
+    console.log('🎨 Step 3: Generating staged image with mask (3-part)...');
 
     const parts: any[] = [
       { text: inpaintingPrompt },
@@ -169,6 +182,12 @@ Add appropriate furniture for a ${body.analysis.roomType} in ${settings.designSt
         inlineData: {
           mimeType,
           data: imageBase64,
+        },
+      },
+      {
+        inlineData: {
+          mimeType: 'image/png',
+          data: maskBase64,
         },
       },
     ];
