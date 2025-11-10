@@ -138,7 +138,7 @@ export function PropertySelector() {
                   value={newPropertyName}
                   onChange={(e) => setNewPropertyName(e.target.value)}
                   placeholder="e.g., 123 Main Street, Beach House, Downtown Condo"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-900 placeholder:text-gray-400"
                 />
               </div>
 
@@ -151,7 +151,7 @@ export function PropertySelector() {
                   value={newPropertyAddress}
                   onChange={(e) => setNewPropertyAddress(e.target.value)}
                   placeholder="e.g., 123 Main St, San Francisco, CA 94102"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-900 placeholder:text-gray-400"
                 />
               </div>
 
@@ -184,7 +184,7 @@ export function PropertySelector() {
                     <select
                       value={selectedPropertyId}
                       onChange={(e) => setSelectedPropertyId(e.target.value)}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-900"
                     >
                       <option value="">Choose a property...</option>
                       {availableProperties.map((property) => (
