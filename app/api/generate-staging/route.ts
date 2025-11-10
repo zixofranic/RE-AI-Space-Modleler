@@ -23,14 +23,38 @@ interface GenerateRequest {
  * Generate floor mask for inpainting
  * This mask tells Gemini EXACTLY which pixels it can edit (white) vs preserve (black)
  */
-async function generateFloorMask(imageBase64: string, mimeType: string, imageId: string, projectId?: string): Promise<string> {
+async function generateFloorMask(imageBase64: string, mimeType: string, imageId: string, analysis: RoomAnalysis, projectId?: string): Promise<string> {
   try {
     const model = genAI.getGenerativeModel({
       model: 'gemini-2.5-flash-image'
     });
 
+    // Build door-specific instructions from analysis
+    const doorCount = analysis.doors || 0;
+    const doorDetails = analysis.doorDetails || [];
+
+    let doorInstructions = '';
+    if (doorCount > 0) {
+      doorInstructions = `
+DOOR DETECTION RESULTS (from AI analysis):
+- This room has ${doorCount} door(s)`;
+
+      if (doorDetails.length > 0) {
+        doorInstructions += '\n- Door locations and details:';
+        doorDetails.forEach((door, idx) => {
+          doorInstructions += `\n  • Door ${idx + 1}: ${door.location} - ${door.type} door (${door.state})`;
+        });
+      }
+
+      doorInstructions += `\n- You MUST protect ALL ${doorCount} door(s) with black paint
+- Protect 3-foot clearance in front of each door`;
+    } else {
+      doorInstructions = '\n⚠️ No doors detected in analysis - carefully scan the image for any doors that may have been missed';
+    }
+
     const maskPrompt = `
 Create a binary segmentation mask for this room image.
+${doorInstructions}
 
 OUTPUT REQUIREMENTS:
 - Return a black and white image with EXACT same dimensions as input
@@ -47,7 +71,7 @@ CRITICAL - Mark as BLACK (preserved):
    - Electrical outlets, switches, vents, thermostats
 
 2. PATHWAYS & CIRCULATION (CRITICAL FOR USABILITY):
-   - Floor area directly in front of ALL doors (minimum 36 inches / 3 feet clearance)
+   - Floor area directly in front of ALL ${doorCount || ''} doors (minimum 36 inches / 3 feet clearance)
    - Walking paths between doors and room entrances
    - Natural circulation routes through the room
    - Entry/exit zones and thresholds
@@ -151,7 +175,7 @@ export async function POST(request: NextRequest) {
     // STEP 1: Generate floor mask for inpainting
     // ============================================================================
     console.log('🎭 Step 1: Generating floor mask...');
-    const maskBase64 = await generateFloorMask(imageBase64, mimeType, body.imageId, body.analysis.projectId);
+    const maskBase64 = await generateFloorMask(imageBase64, mimeType, body.imageId, body.analysis, body.analysis.projectId);
 
     // Merge settings with global settings
     const settings = {

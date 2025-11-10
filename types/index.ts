@@ -22,6 +22,12 @@ export interface RoomAnalysis {
   lighting?: string;
   flooring?: string;
   windows?: number;
+  doors?: number;
+  doorDetails?: Array<{
+    location: string;
+    type: string;
+    state: 'open' | 'closed';
+  }>;
   suggestedPreset?: string;
   spatialInfo?: {
     estimatedDimensions?: { width?: number; length?: number; height?: number };

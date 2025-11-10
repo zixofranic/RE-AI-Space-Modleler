@@ -92,6 +92,14 @@ RESPOND IN THIS EXACT JSON FORMAT (no markdown, just valid JSON):
   "lighting": "description of natural and existing artificial lighting",
   "flooring": "flooring type and condition",
   "windows": 2,
+  "doors": 1,
+  "doorDetails": [
+    {
+      "location": "left wall/right wall/center/corner",
+      "type": "standard/French/sliding/double",
+      "state": "open/closed"
+    }
+  ],
   "walls": "wall condition and color",
   "architecturalDetails": ["detail1", "detail2"],
   "signatureFeatures": ["unique identifying features for this specific room"],
@@ -103,6 +111,7 @@ Focus on:
 - Exact room dimensions and ceiling height estimates
 - ALL architectural features (moldings, built-ins, fireplace, etc.)
 - Window count, size, and placement
+- Door count, location, type, and state (open/closed) - CRITICAL for safety and usability
 - Flooring material and condition
 - Wall features and existing paint/wallpaper
 - Natural lighting direction and quality
@@ -146,12 +155,14 @@ Focus on:
             lighting: analysisData.lighting || '',
             flooring: analysisData.flooring || '',
             windows: analysisData.windows || 0,
+            doors: analysisData.doors || 0,
+            doorDetails: analysisData.doorDetails || [],
             signatureFeatures,
             spatialNotes,
             spatialFingerprint,
           };
 
-          console.log(`✓ Analyzed ${image.name}: ${analysis.roomType} (fingerprint: ${spatialFingerprint})`);
+          console.log(`✓ Analyzed ${image.name}: ${analysis.roomType} - ${analysis.doors} door(s), ${analysis.windows} window(s) (fingerprint: ${spatialFingerprint})`);
           return { id: image.id, analysis };
 
         } catch (error) {
@@ -167,6 +178,7 @@ Focus on:
               lighting: 'Unknown',
               flooring: 'Unknown',
               windows: 0,
+              doors: 0,
             }
           };
         }
