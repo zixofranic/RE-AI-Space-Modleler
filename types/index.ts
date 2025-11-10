@@ -191,6 +191,7 @@ export interface AppState {
 
   // Experimental Features
   enableSpatialConsistency?: boolean; // Toggle for cross-image consistency
+  enableTestMode?: boolean; // Test route with simple prompt
 
   // UI state
   isProcessing: boolean;

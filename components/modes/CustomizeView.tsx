@@ -16,6 +16,8 @@ export function CustomizeView() {
     roomAnalyses,
     enableSpatialConsistency,
     toggleSpatialConsistency,
+    enableTestMode,
+    toggleTestMode,
   } = useStore();
   const [customRequests, setCustomRequests] = useState('');
 
@@ -107,6 +109,47 @@ export function CustomizeView() {
                 <div className="mt-4 p-3 bg-white rounded-lg border border-purple-200">
                   <p className="text-xs text-gray-900 font-medium">
                     ✓ Active: First image will set the style guide. Subsequent images will maintain consistency.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* TEST MODE TOGGLE */}
+            <div className="bg-purple-50 border-2 border-purple-200 rounded-2xl p-6">
+              <div className="flex items-start justify-between">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-2">
+                    <h3 className="text-base font-bold text-gray-900">
+                      🧪 Test Mode - Simple Prompt
+                    </h3>
+                    <span className="px-2 py-1 bg-orange-600 text-white text-xs font-semibold rounded-full">
+                      DEBUG
+                    </span>
+                  </div>
+                  <p className="text-sm text-gray-900 mb-2">
+                    Uses a very simple staging prompt to test if the mask alone can protect doors and windows.
+                  </p>
+                  <p className="text-xs text-gray-700">
+                    <strong>How it works:</strong> Sends same mask generation but with minimal prompt: "Stage this room. Don't delete or block doors/windows."
+                  </p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer ml-4">
+                  <input
+                    type="checkbox"
+                    checked={enableTestMode || false}
+                    onChange={(e) => toggleTestMode(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-14 h-7 bg-gray-300 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-orange-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:start-[4px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-orange-600"></div>
+                  <span className="ml-3 text-sm font-bold text-gray-900">
+                    {enableTestMode ? 'ON' : 'OFF'}
+                  </span>
+                </label>
+              </div>
+              {enableTestMode && (
+                <div className="mt-4 p-3 bg-white rounded-lg border border-orange-200">
+                  <p className="text-xs text-gray-900 font-medium">
+                    ⚠️ Active: Using /api/test-staging with simple prompt. Check debug masks in Supabase.
                   </p>
                 </div>
               )}
