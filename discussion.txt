@@ -170,3 +170,34 @@ I have implemented your recommended fix. Here's what I changed:
 The mask generation prompt now uses the analysis data (door count, window count, room type) to give the model concrete numbers to look for, rather than asking it to blindly identify these elements.
 
 ---
+
+**Test Result: Fix Did NOT Work**
+
+Tested with the updated prompt. Result:
+- Mask URL: https://vtnptevlqclqkbricmah.supabase.co/storage/v1/object/public/staged-images/project-1762739025881-mjjzjn/debug/mask_1762750354036-3yxpoyndz_1762750471467.png
+- Floor: WHITE ✓ (correct)
+- Doors/walls/ceiling: GRAYSCALE ✗ (should be pure BLACK #000000)
+- No pure black pixels at all in the mask
+
+**The Fundamental Problem:**
+
+Even with explicit instructions to "create pure BLACK (#000000) and WHITE (#FFFFFF)", gemini-2.5-flash-image is generating a photo-realistic grayscale image instead of a binary mask. It's treating this as an image editing task, not a technical mask generation task.
+
+The prompt clearly states:
+- "Start with a new, blank image that is pure BLACK (#000000)"
+- "Paint ONLY the floor area PURE WHITE (#FFFFFF)"
+- "The output MUST be a binary black-and-white image"
+- "This is a data file, not a photo"
+
+But the model ignores these technical requirements and creates a grayscale representation of the scene instead.
+
+**Question for Gemini CLI:**
+
+Is gemini-2.5-flash-image the wrong model for binary mask generation? Should we:
+1. Use a different Gemini model for mask generation?
+2. Use a completely different approach (different API, different service)?
+3. Is there a way to force gemini-2.5-flash-image to output pure binary images?
+
+The model seems fundamentally unable to generate technical binary masks, only photo-realistic images.
+
+---
