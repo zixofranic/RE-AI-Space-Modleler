@@ -120,20 +120,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Use Gemini 2.5 Flash Image for actual image generation
+    // Use Gemini 2.5 Pro for simple edit mode
     const model = genAI.getGenerativeModel({
-      model: 'gemini-2.5-flash-image'
+      model: 'gemini-2.5-pro'
     });
 
     const imageBase64 = await dataUrlToBase64(body.imageDataUrl);
     const mimeType = getMimeType(body.imageDataUrl);
 
     // ============================================================================
-    // STEP 1: Generate floor mask for inpainting
+    // STEP 1: MASK DISABLED - Using simple edit mode
     // ============================================================================
-    // Mask is a COMMAND (not a suggestion) - black pixels CANNOT be edited
-    console.log('🎭 Step 1: Generating floor mask (generative approach)...');
-    const maskBase64 = await generateFloorMask(imageBase64, mimeType, body.imageId, body.analysis, body.analysis.projectId);
+    console.log('ℹ️ Step 1: Mask generation disabled - using simple edit mode');
 
     // Merge settings with global settings
     const settings = {
@@ -142,41 +140,28 @@ export async function POST(request: NextRequest) {
     };
 
     // ============================================================================
-    // STEP 2: Build inpainting prompt with integrated shadow instructions
+    // STEP 2: Build simple edit prompt
     // ============================================================================
-    console.log('📝 Step 2: Building inpainting prompt...');
+    console.log('📝 Step 2: Building simple edit prompt...');
 
-    const layer2 = buildDimensionalLayer(body.analysis.roomType);
-    const layer3 = buildFunctionalZoningLayer(body.analysis.roomType);
+    const doors = body.analysis.doors || 0;
+    const windows = body.analysis.windows || 0;
 
-    // Build style guide section if available
-    const styleGuideSection = body.projectStyleGuide
-      ? `
---- PROJECT STYLE GUIDE (MUST FOLLOW FOR CONSISTENCY) ---
-- PRIMARY WOOD: ${body.projectStyleGuide.primaryWood}
-${body.projectStyleGuide.secondaryWood ? `- SECONDARY WOOD: ${body.projectStyleGuide.secondaryWood}` : ''}
-- PRIMARY METAL: ${body.projectStyleGuide.primaryMetal}
-${body.projectStyleGuide.accentMetal ? `- ACCENT METAL: ${body.projectStyleGuide.accentMetal}` : ''}
-- PRIMARY FABRIC: ${body.projectStyleGuide.primaryFabric}
-${body.projectStyleGuide.accentFabric ? `- ACCENT FABRIC: ${body.projectStyleGuide.accentFabric}` : ''}
-${body.projectStyleGuide.rugPattern ? `- RUG PATTERN: ${body.projectStyleGuide.rugPattern}` : ''}
-${body.projectStyleGuide.greeneryType ? `- GREENERY: ${body.projectStyleGuide.greeneryType}` : ''}
-`
-      : '';
+    const inpaintingPrompt = `Edit this image to stage the ${body.analysis.roomType} with ${settings.designStyle || 'modern'} furniture.
 
-    // Build the appropriate prompt based on whether we have a visual reference
-    const inpaintingPrompt = body.referenceImageUrl
-      ? buildSpatialConsistencyPrompt(body, settings, styleGuideSection)
-      : buildStandardStagingPrompt(body, settings, styleGuideSection, layer2, layer3);
+IMPORTANT RULES:
+- This room has ${doors} door(s) - DO NOT cover, hide, or remove ANY doors
+- This room has ${windows} window(s) - DO NOT block windows with furniture
+- Keep all architectural elements (walls, floors, ceilings) unchanged
+- Only add furniture and decor to the empty floor space
+
+Add appropriate furniture for a ${body.analysis.roomType} in ${settings.designStyle || 'modern'} style with ${settings.colorPalette || 'neutral'} colors.
+`;
 
     // ============================================================================
-    // STEP 3: Inpainting API call (3-part with mask, or 4-part with reference image)
+    // STEP 3: Simple edit mode (2-part: prompt + image)
     // ============================================================================
-    const hasReferenceImage = !!body.referenceImageUrl;
-    console.log(hasReferenceImage
-      ? '🧪 Step 3: Generating with VISUAL SPATIAL CONSISTENCY (4-part API call)...'
-      : '🎨 Step 3: Generating staged image with mask-based inpainting (3-part)...'
-    );
+    console.log('🎨 Step 3: Generating with simple edit mode (2-part API call)...');
 
     const parts: any[] = [
       { text: inpaintingPrompt },
@@ -186,28 +171,7 @@ ${body.projectStyleGuide.greeneryType ? `- GREENERY: ${body.projectStyleGuide.gr
           data: imageBase64,
         },
       },
-      {
-        inlineData: {
-          mimeType: 'image/png',
-          data: maskBase64,
-        },
-      },
     ];
-
-    // 🧪 Add reference image as 4th part if spatial consistency is enabled
-    if (hasReferenceImage && body.referenceImageUrl) {
-      console.log('🔗 Adding reference image for visual spatial consistency...');
-      const refImageBase64 = await dataUrlToBase64(body.referenceImageUrl);
-      const refMimeType = getMimeType(body.referenceImageUrl);
-
-      parts.push({
-        inlineData: {
-          mimeType: refMimeType,
-          data: refImageBase64,
-        },
-      });
-      console.log('✅ Reference image added as 4th part');
-    }
 
     const result = await model.generateContent({
       contents: [
