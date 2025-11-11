@@ -38,31 +38,24 @@ async function generateFloorMask(imageBase64: string, mimeType: string, imageId:
     const windows = analysis.windows || 0;
 
     const maskPrompt = `
-You are a technical segmentation tool. Your sole task is to generate a new, binary, black-and-white mask based on the provided photo.
+You are a technical image editing tool. Your task is to create a binary mask by coloring specific parts of a PURE WHITE canvas.
 
-Do NOT edit the original photo. You must CREATE A NEW image.
+You will be given a reference photo and a pure white canvas of the same size.
 
 ROOM ANALYSIS:
-- This photo contains a ${analysis.roomType}.
+- The reference photo contains a ${analysis.roomType}.
 - I have detected ${doors} door(s).
 - I have detected ${windows} window(s).
 
 TASK:
-1. Start with a new, blank image that is pure BLACK (#000000).
-2. Analyze the provided photo to find the floor area.
-3. Paint ONLY the pixels corresponding to the floor area PURE WHITE (#FFFFFF).
-4. It is CRITICAL that the ${doors} door(s) and ${windows} window(s) remain BLACK.
+Your goal is to re-create the walls, doors, and windows from the reference photo as pure black shapes on the white canvas.
 
-OUTPUT REQUIREMENTS:
-- The output MUST be a binary black-and-white image.
-- The output MUST NOT look like the original photo.
-- The output MUST have the exact same dimensions as the input.
+1. **Start with the provided PURE WHITE canvas.** The floor area is already complete.
+2. **Identify the ${doors} door(s)** in the reference photo. On the WHITE canvas, color the areas corresponding to these doors **pure, flat black (#000000)**.
+3. **Identify the ${windows} window(s)** in the reference photo. On the WHITE canvas, color the areas corresponding to these windows **pure, flat black (#000000)**.
+4. **Identify all walls and the ceiling** in the reference photo. On the WHITE canvas, color these areas **pure, flat black (#000000)**.
 
-COLOR RULES:
-- WHITE (#FFFFFF): Only the floor surface (carpet, hardwood, tile).
-- BLACK (#000000): Everything else. This MUST include all walls, the ${doors} door(s), the ${windows} window(s), the ceiling, any trim, and baseboards.
-
-This is a data file, not a photo. Generate a pure binary mask, paying close attention to the room analysis data provided.
+The final output must be a new image that is only two colors: pure white (for the floor) and pure black (for everything else). Do not use any other colors, shades, or gradients.
 `;
 
     console.log('🎭 MASK GENERATION - Sending request to gemini-2.5-flash-image...');
@@ -477,19 +470,27 @@ function buildSpatialFoundationLayer(analysis: RoomAnalysis): string {
   // Build door information from analysis
   let doorInfo = '';
   if (doors > 0 && doorDetails.length > 0) {
-    doorInfo = doorDetails.map((door, idx) =>
-      `- Door ${idx + 1}: ${door.location} - ${door.type} door (${door.state})
+    doorInfo = doorDetails.map((door, idx) => {
+      const doorWidth = 32; // Standard average door width in inches
+      const clearance = 36; // Standard clearance in inches
+
+      return `- Door ${idx + 1}: ${door.location} - ${door.type} door (${door.state})
+  → Estimated Dimensions: Approx. ${doorWidth}" wide
   → ⛔ ABSOLUTELY FORBIDDEN: DO NOT cover, hide, or block this door
   → ⛔ ABSOLUTELY FORBIDDEN: DO NOT place furniture in front of this door
-  → FORBIDDEN ZONE: 36" (3 feet) clearance in front - MUST remain completely empty
-  ${door.state === 'open' ? '  → EXTRA CAUTION: Door is OPEN - requires wider swing clearance' : ''}`
-    ).join('\n');
+  → FORBIDDEN ZONE: ${clearance}" (3 feet) clearance in front - MUST remain completely empty
+  ${door.state === 'open' ? `  → EXTRA CAUTION: Door is OPEN - requires wider swing clearance (consider ${doorWidth + 12}" for swing)` : ''}
+  → RULE: Ensure furniture is positioned and sized to respect these dimensions and clearances.`;
+    }).join('\n');
   } else if (doors > 0) {
+    const doorWidth = 32; // Standard average door width in inches
+    const clearance = 36; // Standard clearance in inches
     doorInfo = `- ${doors} door(s) detected in this room
+  → Estimated Door Dimensions: Approx. ${doorWidth}" wide each
   → ⛔ ABSOLUTELY FORBIDDEN: DO NOT cover, hide, or block ANY of these ${doors} doors
   → ⛔ ABSOLUTELY FORBIDDEN: DO NOT place furniture in front of ANY door
-  → FORBIDDEN ZONE: 36" (3 feet) clearance in front of EACH door
-  → RULE: First identify ALL ${doors} door locations in the image, then keep them 100% visible and clear`;
+  → FORBIDDEN ZONE: ${clearance}" (3 feet) clearance in front of EACH door
+  → RULE: First identify ALL ${doors} door locations in the image, then keep them 100% visible and clear. Ensure furniture is positioned and sized to respect these dimensions and clearances.`;
   } else {
     // Fallback to feature detection
     const doorFeatures = features.filter(f =>
