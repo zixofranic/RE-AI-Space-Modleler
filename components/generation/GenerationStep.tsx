@@ -12,6 +12,8 @@ export function GenerationStep() {
     uploadedImages,
     selectedPreset,
     roomConfigs,
+    roomAnalyses,
+    projectId,
     projectStyleGuide,
     enableSpatialConsistency,
     setStagingResult,
@@ -76,6 +78,8 @@ export function GenerationStep() {
           settings: {},
         };
 
+        const analysis = roomAnalyses[image.id];
+
         // Choose endpoint based on layered generation setting
         const endpoint = config.useLayeredGeneration
           ? '/api/generate-staging-layered'
@@ -95,7 +99,8 @@ export function GenerationStep() {
             imageId: image.id,
             imageDataUrl: image.dataUrl,
             config,
-            // No analysis needed - done inline during mask generation
+            analysis, // Required for layered generation
+            projectId, // Required for database save
             globalSettings,
             projectStyleGuide, // Include style guide for consistency
             enableSpatialConsistency, // Pass toggle state

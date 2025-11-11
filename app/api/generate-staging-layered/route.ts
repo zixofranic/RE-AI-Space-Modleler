@@ -11,7 +11,8 @@ interface LayeredGenerateRequest {
   imageId: string;
   imageDataUrl: string;
   config: RoomStagingConfig;
-  analysis: RoomAnalysis;
+  analysis?: RoomAnalysis;
+  projectId?: string; // Project ID for database save
   globalSettings?: Partial<DesignSettings>;
   projectStyleGuide?: ProjectStyleGuide; // "Seed & Lock" style guide
 }
@@ -43,6 +44,16 @@ export async function POST(request: NextRequest) {
     const imageBase64 = await dataUrlToBase64(body.imageDataUrl);
     const mimeType = getMimeType(body.imageDataUrl);
 
+    // Provide default analysis if not provided
+    const analysis = body.analysis || {
+      roomType: 'Room',
+      doors: 0,
+      windows: 0,
+      ceilingHeight: 'Standard',
+      wallColor: 'Unknown',
+      floorType: 'Unknown',
+    };
+
     const settings = {
       ...body.globalSettings,
       ...body.config.settings,
@@ -56,7 +67,7 @@ export async function POST(request: NextRequest) {
       body.imageDataUrl,
       imageBase64,
       mimeType,
-      body.analysis
+      analysis
     );
     layers.push(layer1Result);
 
@@ -68,7 +79,7 @@ export async function POST(request: NextRequest) {
     const layer2Result = await executeLayer2(
       model,
       layer1Result.imageUrl,
-      body.analysis,
+      analysis,
       settings,
       layer1Result.metadata
     );
@@ -82,7 +93,7 @@ export async function POST(request: NextRequest) {
     const layer3Result = await executeLayer3(
       model,
       layer2Result.imageUrl,
-      body.analysis,
+      analysis,
       settings,
       layer2Result.metadata
     );
@@ -96,7 +107,7 @@ export async function POST(request: NextRequest) {
     const layer4Result = await executeLayer4(
       model,
       layer3Result.imageUrl,
-      body.analysis,
+      analysis,
       layer1Result.metadata
     );
     layers.push(layer4Result);
@@ -144,12 +155,13 @@ Analyze this ${analysis.roomType} image and create a constraint map by:
 
 1. IDENTIFY FORBIDDEN ZONES (mark in RED transparent overlay):
    - ALL doorways, archways, and passage openings
-   - Areas within 36 inches (3 feet) of any opening
+   - ALL windows (CRITICAL - furniture must NOT block windows)
+   - Areas within 36 inches (3 feet) of any opening or window
    - Walkway corridors between rooms
    - Areas that must remain clear for circulation
 
 2. IDENTIFY SAFE PLACEMENT ZONES (mark in GREEN transparent overlay):
-   - Solid wall areas (at least 4 feet from any opening)
+   - Solid wall areas (at least 4 feet from any opening or window)
    - Center of room (if large enough)
    - Areas suitable for furniture placement
 
@@ -160,14 +172,15 @@ Analyze this ${analysis.roomType} image and create a constraint map by:
 
 4. OUTPUT FORMAT:
    Generate the SAME IMAGE with semi-transparent colored overlays:
-   - RED overlay = Forbidden zones (no furniture allowed)
+   - RED overlay = Forbidden zones (no furniture allowed - includes ALL windows and doorways)
    - GREEN overlay = Safe zones (furniture can go here)
    - YELLOW arrows = Light direction
 
 CRITICAL:
 - Keep the original image visible underneath
 - Use 30% transparency for overlays
-- Clearly mark ALL doorways and openings in RED
+- Clearly mark ALL doorways, openings, AND WINDOWS in RED
+- Windows must be completely in RED forbidden zones
 - Be generous with forbidden zones (safety first)
 
 Generate the constraint map now.`;
@@ -266,14 +279,16 @@ Living Room Standard Layout:
 
 PLACEMENT RULES:
 1. Place boxes ONLY in GREEN safe zones from Layer 1
-2. NEVER place boxes in RED forbidden zones
-3. Keep ALL boxes at least 36" from doorways/openings
-4. Orient boxes logically (sofa against wall, facing room)
-5. Maintain 30" walking paths between boxes
+2. NEVER place boxes in RED forbidden zones (doorways, windows, openings)
+3. Keep ALL boxes at least 36" from doorways, windows, and openings
+4. Windows must remain completely unobstructed - NEVER block windows with furniture
+5. Orient boxes logically (sofa against wall, facing room)
+6. Maintain 30" walking paths between boxes
 
 VALIDATION:
-- Count all doorways/openings in RED zones
-- Verify NO boxes overlap with RED zones
+- Count all doorways, windows, and openings in RED zones
+- Verify NO boxes overlap with RED zones (especially windows)
+- Verify all windows are completely clear of furniture
 - Verify boxes have realistic spacing
 
 OUTPUT:
@@ -371,6 +386,8 @@ IMPORTANT:
 - Furniture should look flat/basic (no lighting effects yet)
 - Keep exact positions from Layer 2
 - Maintain all clearances from forbidden zones
+- Verify all windows remain completely unobstructed
+- Do NOT add any furniture that blocks windows or doorways
 
 Generate the styled furniture now.`;
 
@@ -553,13 +570,14 @@ FINAL REFINEMENTS:
 4. Quality Check:
    - All shadows present and realistic
    - No floating furniture
-   - All doorways/openings still clear
+   - All doorways, windows, and openings still clear
+   - All windows completely unobstructed
    - Natural, photorealistic appearance
 
 DO NOT:
 - Move or resize furniture
 - Add new large furniture pieces
-- Block any doorways or openings
+- Block any doorways, windows, or openings
 - Change the overall layout
 
 ONLY refine and polish what's already there.

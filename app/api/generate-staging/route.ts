@@ -14,6 +14,7 @@ interface GenerateRequest {
   imageDataUrl: string;
   config: RoomStagingConfig;
   analysis?: RoomAnalysis; // Optional - now done inline during mask generation
+  projectId?: string; // Project ID for database save
   globalSettings?: Partial<DesignSettings>;
   projectStyleGuide?: ProjectStyleGuide; // "Seed & Lock" style guide
   enableSpatialConsistency?: boolean; // Experimental spatial consistency toggle
@@ -329,8 +330,8 @@ The mask protects all architectural elements. Focus on beautiful staging within 
     try {
       console.log('🔍 Starting database save...');
       const { saveProject, saveImage, saveStagingResult } = await import('@/lib/database');
-      const projectId = body.analysis.projectId || 'default';
-      console.log(`🔍 Project ID from analysis: ${projectId}`);
+      const projectId = body.projectId || body.analysis?.projectId || 'default';
+      console.log(`🔍 Project ID: ${projectId}`);
 
       // 1. Ensure project exists in database
       console.log('🔍 Saving project...');
