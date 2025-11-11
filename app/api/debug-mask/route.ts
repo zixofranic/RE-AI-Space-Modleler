@@ -87,24 +87,15 @@ Return ONLY valid JSON, no markdown formatting.`;
     const doors = analysis.doors || 0;
     const windows = analysis.windows || 0;
 
-    const maskPrompt = `You are a technical image editing tool. Your task is to create a binary mask by coloring specific parts of a PURE WHITE canvas.
+    const maskPrompt = `Create a mask from this ${analysis.roomType} photo.
 
-You will be given a reference photo and a pure white canvas of the same size.
+Step 1: Make everything in the image solid black (#000000).
 
-ROOM ANALYSIS:
-- The reference photo contains a ${analysis.roomType}.
-- I have detected ${doors} door(s).
-- I have detected ${windows} window(s).
+Step 2: Now find ONLY the floor area (the carpet/hardwood/tile at the bottom where people walk). Paint ONLY this floor area solid white (#FFFFFF).
 
-TASK:
-Your goal is to re-create the walls, doors, and windows from the reference photo as pure black shapes on the white canvas.
+Result: The floor is white. Everything else (walls, ceiling, doors, windows, furniture, ceiling fan) remains black.
 
-1. **Start with the provided PURE WHITE canvas.** The floor area is already complete.
-2. **Identify the ${doors} door(s)** in the reference photo. On the WHITE canvas, color the areas corresponding to these doors **pure, flat black (#000000)**.
-3. **Identify the ${windows} window(s)** in the reference photo. On the WHITE canvas, color the areas corresponding to these windows **pure, flat black (#000000)**.
-4. **Identify all walls and the ceiling** in the reference photo. On the WHITE canvas, color these areas **pure, flat black (#000000)**.
-
-The final output must be a new image that is only two colors: pure white (for the floor) and pure black (for everything else). Do not use any other colors, shades, or gradients.`;
+This is a ${analysis.roomType} with ${doors} door(s) and ${windows} window(s). The doors and windows must stay black, not white.`;
 
     const maskResult = await maskModel.generateContent({
       contents: [{
