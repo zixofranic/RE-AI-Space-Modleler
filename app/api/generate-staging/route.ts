@@ -37,15 +37,23 @@ async function generateFloorMask(imageBase64: string, mimeType: string, imageId:
     const doors = analysis.doors || 0;
     const windows = analysis.windows || 0;
 
-    const maskPrompt = `Create a mask from this ${analysis.roomType} photo.
+    const maskPrompt = `You must create a binary mask from this ${analysis.roomType} photo. Do NOT return the original photo.
 
-Step 1: Make everything in the image solid black (#000000).
+CRITICAL: You MUST edit the image. The output must look completely different from the input.
 
-Step 2: Now find ONLY the floor area (the carpet/hardwood/tile at the bottom where people walk). Paint ONLY this floor area solid white (#FFFFFF).
+Step 1: Fill the ENTIRE image with solid black color (#000000). Every pixel must be black.
 
-Result: The floor is white. Everything else (walls, ceiling, doors, windows, furniture, ceiling fan) remains black.
+Step 2: Find ONLY the floor area (carpet/hardwood/tile at the bottom where people walk). Paint ONLY the floor solid white (#FFFFFF).
 
-This is a ${analysis.roomType} with ${doors} door(s) and ${windows} window(s). The doors and windows must stay black, not white.`;
+FINAL RESULT MUST BE:
+- Floor: Pure white (#FFFFFF)
+- Everything else: Pure black (#000000)
+- NO gradients, NO gray, NO original photo details
+- Output must be completely different from input
+
+This is a ${analysis.roomType} with ${doors} door(s) and ${windows} window(s). The doors and windows MUST be black, NOT white.
+
+DO NOT return the original photo. You MUST create a new black and white mask.`;
 
     console.log('🎭 MASK GENERATION - Sending request to gemini-2.5-flash-image...');
     const result = await model.generateContent({
