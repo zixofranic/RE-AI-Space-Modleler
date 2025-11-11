@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useStore } from '@/lib/store';
 import { ImageUploader } from '@/components/upload/ImageUploader';
-import { RoomTypeEditor } from '@/components/upload/RoomTypeEditor';
+import { ImageGrouping } from '@/components/upload/ImageGrouping';
 import { PropertySelector } from '@/components/upload/PropertySelector';
 import { ModeSelector } from '@/components/modes/ModeSelector';
 import { CustomizeView } from '@/components/modes/CustomizeView';
@@ -13,30 +13,18 @@ import { ResultsView } from '@/components/results/ResultsView';
 import { UserMenu } from '@/components/auth/UserMenu';
 import { Button } from '@/components/ui/button';
 import { ArrowRight, ArrowLeft, Sparkles, FolderOpen } from 'lucide-react';
-import { groupSimilarRooms } from '@/lib/spatial-analysis';
 import { setupSupabaseStorage } from '@/lib/setup-storage';
 
 export default function Home() {
   const {
     currentStep,
     uploadedImages,
-    roomAnalyses,
     selectedMode,
     selectedPreset,
-    projectId,
-    currentProperty,
-    setStep,
     nextStep,
     previousStep,
-    setRoomAnalysis,
-    setRoomGroups,
     isProcessing,
-    setProcessing,
-    setError,
   } = useStore();
-
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [lastAnalyzedCount, setLastAnalyzedCount] = useState(0);
 
   // Initialize Supabase storage buckets on app startup
   useEffect(() => {
@@ -50,97 +38,6 @@ export default function Home() {
     };
     initStorage();
   }, []);
-
-  // Auto-analyze images when uploaded
-  useEffect(() => {
-    const analyzeImages = async () => {
-      // Prevent duplicate runs - only analyze if:
-      // 1. There are images
-      // 2. Not currently analyzing
-      // 3. The count has changed since last analysis (allows new batches)
-      if (uploadedImages.length === 0 || isAnalyzing || uploadedImages.length === lastAnalyzedCount) return;
-
-      setIsAnalyzing(true);
-      setLastAnalyzedCount(uploadedImages.length); // Track what we analyzed
-      setProcessing(true);
-
-      try {
-        const response = await fetch('/api/analyze-images', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            projectId: projectId, // Include projectId so analyses include it
-            images: uploadedImages.map((img) => ({
-              id: img.id,
-              name: img.name,
-              dataUrl: img.dataUrl,
-            })),
-          }),
-        });
-
-        if (!response.ok) {
-          throw new Error('Failed to analyze images');
-        }
-
-        const { analyses } = await response.json();
-
-        // Set analyses
-        Object.entries(analyses).forEach(([imageId, analysis]: [string, any]) => {
-          setRoomAnalysis(imageId, analysis);
-        });
-
-        // Group similar rooms
-        const groups = groupSimilarRooms(analyses);
-        setRoomGroups(groups);
-
-        // Save to database (only if we have a projectId from the store)
-        if (projectId) {
-          try {
-            // Prepare images data for database
-            const imagesData = uploadedImages.map((img) => {
-              const analysis = analyses[img.id];
-              return {
-                id: img.id,
-                originalUrl: img.dataUrl, // This should be Supabase URL if uploaded
-                analysis: analysis,
-              };
-            });
-
-            // Save to database
-            const saveResponse = await fetch('/api/save-images', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                projectId: projectId,
-                projectName: currentProperty?.name || `Project ${new Date().toLocaleDateString()}`,
-                projectAddress: currentProperty?.address,
-                images: imagesData,
-              }),
-            });
-
-            if (saveResponse.ok) {
-              const saveResult = await saveResponse.json();
-              console.log(`✅ Saved ${saveResult.savedCount} images to database for project ${projectId}`);
-            } else {
-              console.warn('⚠️ Failed to save images to database (non-fatal)');
-            }
-          } catch (dbError) {
-            console.error('⚠️ Database save error (non-fatal):', dbError);
-            // Don't fail the analysis if database save fails
-          }
-        }
-
-      } catch (error) {
-        console.error('Analysis error:', error);
-        setError(error instanceof Error ? error.message : 'Analysis failed');
-      } finally {
-        setIsAnalyzing(false);
-        setProcessing(false);
-      }
-    };
-
-    analyzeImages();
-  }, [uploadedImages.length]); // Only trigger when count changes
 
   const canProceedFromUpload = uploadedImages.length > 0 && !isProcessing;
   const canProceedFromMode = selectedMode !== undefined;
@@ -236,25 +133,9 @@ export default function Home() {
 
               <ImageUploader />
 
-              {isAnalyzing && (
-                <div className="bg-blue-50 border-2 border-blue-200 rounded-xl p-6">
-                  <div className="flex items-center space-x-3">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                    <div>
-                      <h4 className="font-semibold text-blue-900">
-                        Analyzing Images...
-                      </h4>
-                      <p className="text-blue-900 text-sm">
-                        AI is detecting room types and spatial features
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Room Type Editor - Shows after analysis */}
-              {!isAnalyzing && uploadedImages.length > 0 && Object.keys(roomAnalyses).length > 0 && (
-                <RoomTypeEditor />
+              {/* Manual grouping - no analysis needed! */}
+              {uploadedImages.length > 0 && (
+                <ImageGrouping />
               )}
 
               <div className="flex justify-end">

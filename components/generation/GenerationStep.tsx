@@ -10,7 +10,6 @@ import type { LayerResult } from '@/types';
 export function GenerationStep() {
   const {
     uploadedImages,
-    roomAnalyses,
     selectedPreset,
     roomConfigs,
     projectStyleGuide,
@@ -71,7 +70,6 @@ export function GenerationStep() {
       setGenerationStatus(prev => ({ ...prev, [image.id]: 'processing' }));
 
       try {
-        const analysis = roomAnalyses[image.id];
         const config = roomConfigs[image.id] || {
           roomId: image.id,
           mode: 'preset',
@@ -97,7 +95,7 @@ export function GenerationStep() {
             imageId: image.id,
             imageDataUrl: image.dataUrl,
             config,
-            analysis,
+            // No analysis needed - done inline during mask generation
             globalSettings,
             projectStyleGuide, // Include style guide for consistency
             enableSpatialConsistency, // Pass toggle state

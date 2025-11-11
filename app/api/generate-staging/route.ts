@@ -13,7 +13,7 @@ interface GenerateRequest {
   imageId: string;
   imageDataUrl: string;
   config: RoomStagingConfig;
-  analysis: RoomAnalysis;
+  analysis?: RoomAnalysis; // Optional - now done inline during mask generation
   globalSettings?: Partial<DesignSettings>;
   projectStyleGuide?: ProjectStyleGuide; // "Seed & Lock" style guide
   enableSpatialConsistency?: boolean; // Experimental spatial consistency toggle
@@ -21,41 +21,41 @@ interface GenerateRequest {
 }
 
 /**
- * Generate floor mask for inpainting
- * This mask tells Gemini EXACTLY which pixels it can edit (white) vs preserve (black)
+ * Analyze image and generate floor mask in a single call
+ * Returns both basic room info and the mask for efficiency
  */
-async function generateFloorMask(imageBase64: string, mimeType: string, imageId: string, analysis: RoomAnalysis, projectId?: string): Promise<string> {
+async function analyzeAndGenerateMask(imageBase64: string, mimeType: string, imageId: string, projectId?: string): Promise<{ mask: string; roomType: string; doors: number; windows: number }> {
   try {
-    console.log('🎭 MASK GENERATION - Starting...');
+    console.log('🎭 COMBINED ANALYSIS + MASK - Starting...');
     console.log(`📊 Input: imageId=${imageId}, mimeType=${mimeType}, base64Length=${imageBase64.length}`);
-    console.log(`📊 Analysis: roomType=${analysis.roomType}, doors=${analysis.doors || 0}, windows=${analysis.windows || 0}`);
 
     const model = genAI.getGenerativeModel({
       model: 'gemini-2.5-flash-image'
     });
 
-    const doors = analysis.doors || 0;
-    const windows = analysis.windows || 0;
+    // Combined prompt: detect room type + count doors/windows + generate mask
+    const maskPrompt = `Analyze this room and create a binary floor mask.
 
-    const maskPrompt = `You must create a binary mask from this ${analysis.roomType} photo. Do NOT return the original photo.
+STEP 1 - ANALYSIS:
+Tell me:
+- Room type (e.g., "Living Room", "Bedroom", "Kitchen")
+- Number of doors visible
+- Number of windows visible
 
-CRITICAL: You MUST edit the image. The output must look completely different from the input.
+Format: ROOM:[type] DOORS:[number] WINDOWS:[number]
 
-Step 1: Fill the ENTIRE image with solid black color (#000000). Every pixel must be black.
+STEP 2 - CREATE MASK:
+1. Fill ENTIRE image with solid black (#000000)
+2. Paint ONLY floor area solid white (#FFFFFF)
 
-Step 2: Find ONLY the floor area (carpet/hardwood/tile at the bottom where people walk). Paint ONLY the floor solid white (#FFFFFF).
+RESULT MUST BE:
+- Floor = Pure white
+- Everything else = Pure black
+- NO original photo details
 
-FINAL RESULT MUST BE:
-- Floor: Pure white (#FFFFFF)
-- Everything else: Pure black (#000000)
-- NO gradients, NO gray, NO original photo details
-- Output must be completely different from input
+CRITICAL: Output must look completely different from input. DO NOT return the original photo.`;
 
-This is a ${analysis.roomType} with ${doors} door(s) and ${windows} window(s). The doors and windows MUST be black, NOT white.
-
-DO NOT return the original photo. You MUST create a new black and white mask.`;
-
-    console.log('🎭 MASK GENERATION - Sending request to gemini-2.5-flash-image...');
+    console.log('🎭 COMBINED - Sending request to gemini-2.5-flash-image...');
     const result = await model.generateContent({
       contents: [{
         role: 'user',
@@ -74,18 +74,41 @@ DO NOT return the original photo. You MUST create a new black and white mask.`;
     const response = await result.response;
     const candidates = response.candidates;
 
-    console.log(`🎭 MASK GENERATION - Response received, candidates=${candidates?.length || 0}`);
+    console.log(`🎭 COMBINED - Response received, candidates=${candidates?.length || 0}`);
 
     if (candidates && candidates.length > 0 && candidates[0].content) {
       const parts = candidates[0].content.parts;
+
+      // Extract text response for analysis
+      const textPart = parts.find((part: any) => part.text);
       const imagePart = parts.find((part: any) => part.inlineData);
 
-      console.log(`🎭 MASK GENERATION - Found ${parts.length} parts, imagePart=${!!imagePart}`);
+      console.log(`🎭 COMBINED - Found ${parts.length} parts, textPart=${!!textPart}, imagePart=${!!imagePart}`);
+
+      // Parse room info from text
+      let roomType = 'Room';
+      let doors = 0;
+      let windows = 0;
+
+      if (textPart && textPart.text) {
+        const text = textPart.text;
+        console.log('📝 Response text:', text);
+
+        const roomMatch = text.match(/ROOM:\s*(.+?)(?:\s+DOORS|$)/i);
+        const doorsMatch = text.match(/DOORS:\s*(\d+)/i);
+        const windowsMatch = text.match(/WINDOWS:\s*(\d+)/i);
+
+        if (roomMatch) roomType = roomMatch[1].trim();
+        if (doorsMatch) doors = parseInt(doorsMatch[1]);
+        if (windowsMatch) windows = parseInt(windowsMatch[1]);
+
+        console.log(`✅ ANALYSIS - Room: ${roomType}, Doors: ${doors}, Windows: ${windows}`);
+      }
 
       if (imagePart && imagePart.inlineData) {
         const maskData = imagePart.inlineData.data;
         const maskMimeType = imagePart.inlineData.mimeType;
-        console.log(`✅ MASK GENERATION - Success! mimeType=${maskMimeType}, dataLength=${maskData.length}`);
+        console.log(`✅ MASK - Success! mimeType=${maskMimeType}, dataLength=${maskData.length}`);
 
         // ============================================================================
         // MASK IS NOW BINARY - No reconstruction needed!
@@ -113,16 +136,16 @@ DO NOT return the original photo. You MUST create a new black and white mask.`;
           }
         }
 
-        return processedMaskData; // Return the reconstructed binary mask
+        return { mask: processedMaskData, roomType, doors, windows };
       }
     }
 
     // NO FALLBACK - Throw error instead of returning null
-    throw new Error('Mask generation failed: No mask image returned from Gemini');
+    throw new Error('Combined analysis+mask failed: No mask image returned from Gemini');
 
   } catch (error) {
-    console.error('❌ Error generating mask:', error);
-    throw new Error(`Mask generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    console.error('❌ Error in combined analysis+mask:', error);
+    throw new Error(`Combined analysis+mask failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
 
@@ -146,10 +169,17 @@ export async function POST(request: NextRequest) {
     const mimeType = getMimeType(body.imageDataUrl);
 
     // ============================================================================
-    // STEP 1: Generate floor mask for inpainting
+    // STEP 1: Analyze image and generate floor mask in one call
     // ============================================================================
-    console.log('🎭 Step 1: Generating floor mask...');
-    const maskBase64 = await generateFloorMask(imageBase64, mimeType, body.imageId, body.analysis, body.analysis.projectId);
+    console.log('🎭 Step 1: Combined analysis + mask generation...');
+    const { mask: maskBase64, roomType, doors, windows } = await analyzeAndGenerateMask(
+      imageBase64,
+      mimeType,
+      body.imageId,
+      body.analysis?.projectId
+    );
+
+    console.log(`✅ Got room info: ${roomType}, ${doors} doors, ${windows} windows`);
 
     // Merge settings with global settings
     const settings = {
@@ -162,9 +192,6 @@ export async function POST(request: NextRequest) {
     // ============================================================================
     console.log('📝 Step 2: Building staging prompt...');
 
-    const doors = body.analysis.doors || 0;
-    const windows = body.analysis.windows || 0;
-
     const inpaintingPrompt = `You are a professional virtual staging AI.
 
 TASK: Fill the white-masked area of this image with staged furniture.
@@ -175,7 +202,7 @@ The mask (third image) shows which pixels you can edit:
 This is a TECHNICAL CONSTRAINT - black pixels are locked and cannot be modified.
 
 ROOM INFORMATION:
-- Room type: ${body.analysis.roomType}
+- Room type: ${roomType}
 - Detected ${doors} door(s) - these are BLACK in the mask (protected)
 - Detected ${windows} window(s) - these are BLACK in the mask (protected)
 
@@ -193,7 +220,7 @@ The mask protects all architectural elements. Focus on beautiful staging within 
     console.log('=====================================');
     console.log(inpaintingPrompt);
     console.log('=====================================');
-    console.log(`📊 Prompt info: doors=${doors}, windows=${windows}, roomType=${body.analysis.roomType}, style=${settings.designStyle || 'modern'}`);
+    console.log(`📊 Prompt info: doors=${doors}, windows=${windows}, roomType=${roomType}, style=${settings.designStyle || 'modern'}`);
 
     // ============================================================================
     // STEP 3: Staging with mask (3-part API call)
@@ -261,7 +288,7 @@ The mask protects all architectural elements. Focus on beautiful staging within 
     }
 
     // Also get text description if available
-    let description = `Professionally staged ${body.analysis.roomType} with ${settings.designStyle || 'modern'} design.`;
+    let description = `Professionally staged ${roomType} with ${settings.designStyle || 'modern'} design.`;
     let suggestions = '';
 
     try {
@@ -283,7 +310,7 @@ The mask protects all architectural elements. Focus on beautiful staging within 
 
     const stagingResult = {
       imageId: body.imageId,
-      roomType: body.analysis.roomType,
+      roomType: roomType,
       description,
       suggestions: suggestions || `Staged with ${settings.designStyle || 'modern'} furniture and ${settings.colorPalette || 'neutral'} color palette.`,
       stagedImageUrl, // Now contains the actual generated image!
@@ -779,7 +806,7 @@ The mask protects:
 ✓ Add decor items that fit within the WHITE area
 
 --- STAGING INSTRUCTIONS ---
-- ROOM: ${body.analysis.roomType}
+- ROOM: ${roomType}
 ${settings.customAdditions ? `- CUSTOM REQUESTS: ${settings.customAdditions}` : ''}
 
 --- PRESET CONSTRAINTS (MUST FOLLOW) ---
@@ -881,8 +908,7 @@ This is a visual-spatial reasoning task. The final image must look like the *sam
 ${styleGuideSection}
 
 --- TARGET ROOM ANALYSIS ---
-- ROOM: ${body.analysis.roomType}
-- SPATIAL NOTES: ${body.analysis.spatialNotes || 'Same space as reference image'}
+- ROOM: ${roomType}
 ${settings.customAdditions ? `- CUSTOM REQUESTS: ${settings.customAdditions}` : ''}
 
 OUTPUT: Generate a staged image of the Target room that looks like the Reference room from a new angle.
