@@ -80,89 +80,28 @@ This is a ${analysis.roomType} with ${doors} door(s) and ${windows} window(s). T
         console.log(`✅ MASK GENERATION - Success! mimeType=${maskMimeType}, dataLength=${maskData.length}`);
 
         // ============================================================================
-        // INTELLIGENT MASK EXTRACTION: Reconstruct binary mask from floor data
+        // MASK IS NOW BINARY - No reconstruction needed!
         // ============================================================================
-        console.log('🔧 MASK RECONSTRUCTION - Starting intelligent extraction...');
-        let processedMaskData = maskData; // Default to original if reconstruction fails
+        // The new two-step prompt produces pure binary masks directly from Gemini.
+        // No need for Sharp reconstruction anymore.
+        console.log('✅ MASK GENERATION - Mask is already binary, no reconstruction needed');
+        let processedMaskData = maskData; // Use the mask as-is
 
-        try {
-          const grayscaleMaskBuffer = Buffer.from(maskData, 'base64');
-
-          // Get the dimensions of the mask
-          const metadata = await sharp(grayscaleMaskBuffer).metadata();
-          const { width, height } = metadata;
-
-          console.log(`🔧 MASK RECONSTRUCTION - Original mask dimensions: ${width}x${height}`);
-
-          if (width && height) {
-            // Create a new, truly black canvas
-            const blackCanvas = await sharp({
-              create: {
-                width,
-                height,
-                channels: 3,
-                background: { r: 0, g: 0, b: 0 }
-              }
-            }).png().toBuffer();
-
-            console.log('🔧 MASK RECONSTRUCTION - Created pure black canvas');
-
-            // Extract the white floor from the grayscale mask and composite it
-            // onto our new black canvas. This works because the floor is the only
-            // pure white area.
-            const finalMaskBuffer = await sharp(blackCanvas)
-              .composite([
-                {
-                  input: grayscaleMaskBuffer,
-                  blend: 'lighten' // This will only add the lighter (white) pixels
-                }
-              ])
-              .threshold(254) // Final cleanup to ensure pure black and white
-              .png()
-              .toBuffer();
-
-            processedMaskData = finalMaskBuffer.toString('base64');
-            console.log('✅ MASK RECONSTRUCTION - Built new binary mask from floor data');
-            console.log(`✅ MASK RECONSTRUCTION - Final mask size: ${processedMaskData.length} bytes`);
-          }
-        } catch (reconstructionError) {
-          console.warn('⚠️ MASK RECONSTRUCTION - Failed to build new mask:', reconstructionError);
-          console.warn('⚠️ MASK RECONSTRUCTION - Falling back to original grayscale mask');
-        }
-
-        // DEBUG: Save ORIGINAL grayscale mask to Supabase for comparison
-        if (isSupabaseConfigured() && projectId) {
-          try {
-            const maskBlob = new Blob([
-              Uint8Array.from(atob(maskData), c => c.charCodeAt(0))
-            ], { type: 'image/png' });
-
-            const debugPath = `${projectId}/debug/mask_grayscale_${imageId}_${Date.now()}.png`;
-            await supabase.storage
-              .from('staged-images')
-              .upload(debugPath, maskBlob, { upsert: true });
-
-            console.log(`🐛 DEBUG: Grayscale mask saved to staged-images/${debugPath}`);
-          } catch (debugError) {
-            console.warn('⚠️ Could not save grayscale debug mask:', debugError);
-          }
-        }
-
-        // DEBUG: Save RECONSTRUCTED mask to Supabase for inspection
+        // DEBUG: Save binary mask to Supabase for inspection
         if (isSupabaseConfigured() && projectId) {
           try {
             const maskBlob = new Blob([
               Uint8Array.from(atob(processedMaskData), c => c.charCodeAt(0))
             ], { type: 'image/png' });
 
-            const debugPath = `${projectId}/debug/mask_reconstructed_${imageId}_${Date.now()}.png`;
+            const debugPath = `${projectId}/debug/mask_binary_${imageId}_${Date.now()}.png`;
             await supabase.storage
               .from('staged-images')
               .upload(debugPath, maskBlob, { upsert: true });
 
-            console.log(`🐛 DEBUG: Reconstructed mask saved to staged-images/${debugPath}`);
+            console.log(`🐛 DEBUG: Binary mask saved to staged-images/${debugPath}`);
           } catch (debugError) {
-            console.warn('⚠️ Could not save reconstructed debug mask:', debugError);
+            console.warn('⚠️ Could not save debug mask:', debugError);
           }
         }
 
@@ -235,6 +174,7 @@ ROOM INFORMATION:
 STAGING REQUIREMENTS:
 - Style: ${settings.designStyle || 'modern'}
 - Color palette: ${settings.colorPalette || 'neutral colors'}
+${settings.customAdditions ? `- CUSTOM REQUESTS: ${settings.customAdditions}` : ''}
 - Add appropriate furniture ONLY to the WHITE floor area
 - Create realistic shadows for all furniture
 
