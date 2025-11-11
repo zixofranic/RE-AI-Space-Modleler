@@ -45,13 +45,12 @@ export async function POST(request: NextRequest) {
     const mimeType = getMimeType(body.imageDataUrl);
 
     // Provide default analysis if not provided
-    const analysis = body.analysis || {
+    const analysis: RoomAnalysis = body.analysis || {
+      imageId: body.imageId,
       roomType: 'Room',
+      features: [],
       doors: 0,
       windows: 0,
-      ceilingHeight: 'Standard',
-      wallColor: 'Unknown',
-      floorType: 'Unknown',
     };
 
     const settings = {

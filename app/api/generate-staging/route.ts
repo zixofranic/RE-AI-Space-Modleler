@@ -775,7 +775,10 @@ function buildStandardStagingPrompt(
   settings: Partial<DesignSettings>,
   styleGuideSection: string,
   layer2: string,
-  layer3: string
+  layer3: string,
+  roomType: string = 'Room',
+  doors: number = 0,
+  windows: number = 0
 ): string {
   return `You are a professional virtual staging AI.
 
@@ -791,8 +794,8 @@ All black-masked areas MUST remain 100% identical to the original image.
 
 🚨🚨🚨 CRITICAL PRESERVATION RULES 🚨🚨🚨
 The mask protects:
-- ALL ${body.analysis.doors || 0} doors (including closet doors) = BLACK in mask
-- ALL ${body.analysis.windows || 0} windows = BLACK in mask
+- ALL ${doors || 0} doors (including closet doors) = BLACK in mask
+- ALL ${windows || 0} windows = BLACK in mask
 - All walls, ceilings, baseboards, trim = BLACK in mask
 - Only the floor = WHITE in mask
 
@@ -848,7 +851,7 @@ Focus on creating beautiful, realistic staging with hyper-realistic shadows inte
 
 🚨 FINAL REMINDER - READ THIS BEFORE GENERATING:
 1. You have a MASK image - BLACK pixels CANNOT be edited (this is a technical constraint)
-2. The mask protects ${body.analysis.doors || 0} door(s) - they are BLACK in the mask
+2. The mask protects ${doors || 0} door(s) - they are BLACK in the mask
 3. ONLY edit the WHITE pixels (floor area)
 4. BLACK areas (walls, doors, windows) MUST remain identical to original image
 5. This is not a suggestion - the mask is a technical command
@@ -863,7 +866,8 @@ The mask defines the editable area. Focus on creating beautiful, realistic stagi
 function buildSpatialConsistencyPrompt(
   body: GenerateRequest,
   settings: Partial<DesignSettings>,
-  styleGuideSection: string
+  styleGuideSection: string,
+  roomType: string = 'Room'
 ): string {
   return `You are a spatial consistency AI. You will be given FOUR inputs:
 1. This text prompt
