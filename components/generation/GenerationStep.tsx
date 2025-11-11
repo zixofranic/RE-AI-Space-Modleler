@@ -15,7 +15,6 @@ export function GenerationStep() {
     roomConfigs,
     projectStyleGuide,
     enableSpatialConsistency,
-    enableTestMode,
     setStagingResult,
     setProjectStyleGuide,
     nextStep,
@@ -79,10 +78,8 @@ export function GenerationStep() {
           settings: {},
         };
 
-        // Use test route if test mode is enabled, otherwise check for layered generation
-        const endpoint = enableTestMode
-          ? '/api/test-staging'
-          : config.useLayeredGeneration
+        // Choose endpoint based on layered generation setting
+        const endpoint = config.useLayeredGeneration
           ? '/api/generate-staging-layered'
           : '/api/generate-staging';
 

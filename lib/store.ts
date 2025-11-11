@@ -54,7 +54,6 @@ interface AppActions {
 
   // Experimental Features
   toggleSpatialConsistency: (enabled: boolean) => void;
-  toggleTestMode: (enabled: boolean) => void;
 
   // Results
   setStagingResult: (imageId: string, result: StagingResult) => void;
@@ -78,7 +77,6 @@ const initialState: AppState = {
   roomConfigs: {},
   stagingResults: {},
   enableSpatialConsistency: false, // Experimental feature toggle
-  enableTestMode: false, // Test route with simple prompt
   isProcessing: false,
   projectId: undefined, // Will be auto-generated on first use
 };
@@ -255,7 +253,6 @@ export const useStore = create<AppState & AppActions>()(
 
   // Experimental Features
   toggleSpatialConsistency: (enabled) => set({ enableSpatialConsistency: enabled }),
-  toggleTestMode: (enabled) => set({ enableTestMode: enabled }),
 
   // Results
   setStagingResult: async (imageId, result) => {
