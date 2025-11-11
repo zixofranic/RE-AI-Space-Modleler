@@ -24,27 +24,21 @@ async function generateFloorMask(imageBase64: string, mimeType: string, imageId:
       model: 'gemini-2.5-flash-image'
     });
 
-    const maskPrompt = `
-You are a technical segmentation tool. Your sole task is to generate a new, binary, black-and-white mask based on the provided photo.
+    const maskPrompt = `You must create a binary mask from this photo. Do NOT return the original photo.
 
-Do NOT edit the original photo. You must CREATE A NEW image.
+CRITICAL: You MUST edit the image. The output must look completely different from the input.
 
-TASK:
-1. Start with a new, blank image that is pure BLACK (#000000).
-2. Analyze the provided photo to find the floor area (the carpet, hardwood, or tile).
-3. Paint ONLY the pixels corresponding to the floor area PURE WHITE (#FFFFFF).
-4. The final output must be this new 2-color (black and white) mask.
+Step 1: Fill the ENTIRE image with solid black color (#000000). Every pixel must be black.
 
-OUTPUT REQUIREMENTS:
-- The output MUST be a binary black-and-white image.
-- The output MUST NOT look like the original photo.
-- The output MUST have the exact same dimensions as the input.
+Step 2: Find ONLY the floor area (carpet/hardwood/tile at the bottom where people walk). Paint ONLY the floor solid white (#FFFFFF).
 
-COLOR RULES:
-- WHITE (#FFFFFF): Only the floor surface (carpet, hardwood, tile).
-- BLACK (#000000): Everything else (walls, doors, windows, ceiling, ceiling fan, trim, baseboards, etc.).
+FINAL RESULT MUST BE:
+- Floor: Pure white (#FFFFFF)
+- Everything else: Pure black (#000000)
+- NO gradients, NO gray, NO original photo details
+- Output must be completely different from input
 
-This is a data file, not a photo. Generate a pure binary mask.
+DO NOT return the original photo. You MUST create a new black and white mask.
 `;
 
     const result = await model.generateContent({
