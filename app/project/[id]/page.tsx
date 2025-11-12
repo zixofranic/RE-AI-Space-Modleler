@@ -172,27 +172,42 @@ export default function ProjectDetailPage() {
                   </div>
 
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    {/* Original Image */}
+                    {/* Original Image - Use thumbnail for grid */}
                     <div className="cursor-pointer" onClick={() => openPhotoViewer(allImages, 0)}>
                       <img
-                        src={image.dataUrl}
+                        src={image.thumbnailUrl || image.dataUrl}
                         alt="Original"
+                        loading="lazy"
                         className="w-full aspect-video object-cover rounded-lg border-2 border-gray-200 hover:border-purple-500 transition-all hover:opacity-80"
                       />
                       <p className="text-center mt-2 text-sm font-semibold text-gray-900">Original</p>
                     </div>
 
-                    {/* Staged Versions */}
-                    {versions.map((version, idx) => (
+                    {/* Staged Versions - Only show first 3, use thumbnails */}
+                    {versions.slice(0, 3).map((version, idx) => (
                       <div key={idx} className="cursor-pointer" onClick={() => openPhotoViewer(allImages, idx + 1)}>
                         <img
                           src={version.stagedImageUrl}
                           alt={`Version ${idx + 1}`}
+                          loading="lazy"
                           className="w-full aspect-video object-cover rounded-lg border-2 border-gray-200 hover:border-purple-500 transition-all hover:opacity-80"
                         />
                         <p className="text-center mt-2 text-sm font-semibold text-gray-900">Version {idx + 1}</p>
                       </div>
                     ))}
+
+                    {/* Show "View More" button if there are more than 3 versions */}
+                    {versions.length > 3 && (
+                      <div
+                        className="cursor-pointer flex items-center justify-center bg-gray-100 rounded-lg border-2 border-gray-300 hover:border-purple-500 transition-all aspect-video"
+                        onClick={() => openPhotoViewer(allImages, 4)}
+                      >
+                        <div className="text-center">
+                          <p className="text-2xl font-bold text-gray-600">+{versions.length - 3}</p>
+                          <p className="text-sm text-gray-600 mt-1">more versions</p>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
 

@@ -8,7 +8,8 @@ export const MAX_VERSIONS_PER_IMAGE = 4;
 export interface UploadedImage {
   id: string;
   file: File | null;
-  dataUrl: string;
+  dataUrl: string; // Full-size image URL
+  thumbnailUrl?: string; // Thumbnail URL for grid views
   name: string;
 }
 

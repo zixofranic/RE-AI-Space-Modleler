@@ -460,7 +460,8 @@ export const useStore = create<AppState & AppActions>()(
         uploadedImages: images.map((img: any) => ({
           id: img.id,
           file: null as any,
-          dataUrl: img.original_url, // Supabase URL - safe to persist
+          dataUrl: img.original_url, // Full-size for viewer
+          thumbnailUrl: img.thumbnail_url, // Thumbnail for grid
           name: img.id,
         })),
         roomAnalyses: allAnalyses,
