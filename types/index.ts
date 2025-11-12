@@ -11,6 +11,7 @@ export interface UploadedImage {
   dataUrl: string; // Full-size image URL
   thumbnailUrl?: string; // Thumbnail URL for grid views
   name: string;
+  manualRoomType?: string; // Optional manual override for room type
 }
 
 export interface RoomAnalysis {

@@ -8,8 +8,22 @@ import { generateId } from '@/lib/utils';
 import type { UploadedImage } from '@/types';
 import { Button } from '@/components/ui/button';
 
+const ROOM_TYPES = [
+  { value: '', label: 'Auto-detect (AI)' },
+  { value: 'Living Room', label: 'Living Room' },
+  { value: 'Bedroom', label: 'Bedroom' },
+  { value: 'Kitchen', label: 'Kitchen' },
+  { value: 'Dining Room', label: 'Dining Room' },
+  { value: 'Bathroom', label: 'Bathroom' },
+  { value: 'Home Office', label: 'Home Office' },
+  { value: 'Entrance/Lobby', label: 'Entrance/Lobby' },
+  { value: 'Hallway', label: 'Hallway' },
+  { value: 'Basement', label: 'Basement' },
+  { value: 'Garage', label: 'Garage' },
+];
+
 export function ImageUploader() {
-  const { uploadedImages, addImages, removeImage, reset } = useStore();
+  const { uploadedImages, addImages, removeImage, setImageRoomType, reset } = useStore();
   const [isProcessing, setIsProcessing] = useState(false);
 
   const onDrop = useCallback(
@@ -182,7 +196,21 @@ export function ImageUploader() {
                   </div>
 
                   <div className="p-3 bg-gradient-to-r from-purple-50 to-indigo-50">
-                    <p className="text-xs text-gray-700 truncate font-medium">{image.name}</p>
+                    <p className="text-xs text-gray-700 truncate font-medium mb-2">{image.name}</p>
+                    <select
+                      value={image.manualRoomType || ''}
+                      onChange={(e) => setImageRoomType(image.id, e.target.value)}
+                      className="w-full text-xs px-2 py-1 border border-gray-300 rounded bg-white text-gray-800 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    >
+                      {ROOM_TYPES.map((type) => (
+                        <option key={type.value} value={type.value}>
+                          {type.label}
+                        </option>
+                      ))}
+                    </select>
+                    {image.manualRoomType && (
+                      <p className="text-xs text-purple-600 mt-1 font-semibold">✓ Manual override</p>
+                    )}
                   </div>
                 </div>
               );

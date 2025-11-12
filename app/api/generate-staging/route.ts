@@ -19,6 +19,7 @@ interface GenerateRequest {
   projectStyleGuide?: ProjectStyleGuide; // "Seed & Lock" style guide
   enableSpatialConsistency?: boolean; // Experimental spatial consistency toggle
   referenceImageUrl?: string; // 🧪 VISUAL REFERENCE: Staged Image 1 URL for multi-image consistency
+  manualRoomType?: string; // Optional manual room type override
 }
 
 /**
@@ -173,14 +174,16 @@ export async function POST(request: NextRequest) {
     // STEP 1: Analyze image and generate floor mask in one call
     // ============================================================================
     console.log('🎭 Step 1: Combined analysis + mask generation...');
-    const { mask: maskBase64, roomType, doors, windows } = await analyzeAndGenerateMask(
+    const { mask: maskBase64, roomType: detectedRoomType, doors, windows } = await analyzeAndGenerateMask(
       imageBase64,
       mimeType,
       body.imageId,
       body.analysis?.projectId
     );
 
-    console.log(`✅ Got room info: ${roomType}, ${doors} doors, ${windows} windows`);
+    // Use manual room type if provided, otherwise use AI-detected
+    const roomType = body.manualRoomType || detectedRoomType;
+    console.log(`✅ Got room info: ${roomType}${body.manualRoomType ? ' (manual override)' : ' (AI-detected)'}, ${doors} doors, ${windows} windows`);
 
     // Merge settings with global settings
     const settings = {

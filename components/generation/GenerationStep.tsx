@@ -105,6 +105,7 @@ export function GenerationStep() {
             projectStyleGuide, // Include style guide for consistency
             enableSpatialConsistency, // Pass toggle state
             referenceImageUrl: currentIndex > 1 && enableSpatialConsistency ? firstStagedImageUrl : undefined, // 🧪 Visual reference for 2nd+ images
+            manualRoomType: image.manualRoomType, // Manual room type override if set
           }),
         });
 

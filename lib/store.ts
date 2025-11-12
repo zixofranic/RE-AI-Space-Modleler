@@ -34,6 +34,7 @@ interface AppActions {
   // Image management
   addImages: (images: UploadedImage[]) => void;
   removeImage: (imageId: string) => void;
+  setImageRoomType: (imageId: string, roomType: string) => void;
   setRoomAnalysis: (imageId: string, analysis: RoomAnalysis) => void;
   setRoomGroups: (groups: RoomGroup[]) => void;
 
@@ -162,6 +163,13 @@ export const useStore = create<AppState & AppActions>()(
       uploadedImages: state.uploadedImages.filter((img) => img.id !== imageId),
       roomAnalyses: Object.fromEntries(
         Object.entries(state.roomAnalyses).filter(([id]) => id !== imageId)
+      ),
+    })),
+
+  setImageRoomType: (imageId, roomType) =>
+    set((state) => ({
+      uploadedImages: state.uploadedImages.map((img) =>
+        img.id === imageId ? { ...img, manualRoomType: roomType } : img
       ),
     })),
 
