@@ -139,7 +139,7 @@ export default function MyProjectsPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {projects.map((project) => {
               const firstImage = project.images?.[0];
-              const imageCount = project.images?.length || 0;
+              const imageCount = (project as any)._imageCount || project.images?.length || 0;
 
               return (
                 <Link
