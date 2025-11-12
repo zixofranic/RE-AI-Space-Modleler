@@ -15,6 +15,8 @@ interface GenerateRequest {
   config: RoomStagingConfig;
   analysis?: RoomAnalysis; // Optional - now done inline during mask generation
   projectId?: string; // Project ID for database save
+  projectName?: string; // Project name to preserve
+  projectAddress?: string; // Project address to preserve
   globalSettings?: Partial<DesignSettings>;
   projectStyleGuide?: ProjectStyleGuide; // "Seed & Lock" style guide
   enableSpatialConsistency?: boolean; // Experimental spatial consistency toggle
@@ -423,13 +425,14 @@ Use the analysis data above to understand the room layout and stage accordingly.
       // 1. Ensure project exists in database
       console.log('🔍 Saving project...');
       await saveProject(projectId, {
-        name: `Project ${new Date().toLocaleDateString()}`,
+        name: body.projectName || `Project ${new Date().toLocaleDateString()}`,
+        address: body.projectAddress,
         settings: settings,
         metadata: {
           lastGeneratedAt: new Date().toISOString(),
         }
       });
-      console.log(`✅ Project saved to database: ${projectId}`);
+      console.log(`✅ Project saved to database: ${projectId} with name: ${body.projectName || 'auto-generated'}`);
 
       // 2. Ensure original image exists in database
       if (body.imageDataUrl) {

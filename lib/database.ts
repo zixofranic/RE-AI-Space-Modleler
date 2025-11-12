@@ -12,12 +12,23 @@ export async function saveProject(projectId: string, data: {
   metadata?: Record<string, any>;
 }) {
   try {
+    // First check if project exists to preserve the name if already set
+    const { data: existingProject } = await supabase
+      .from('projects')
+      .select('name, address')
+      .eq('id', projectId)
+      .single();
+
+    // Use existing name/address if not provided in update, fallback to generated name only if nothing exists
+    const projectName = data.name || existingProject?.name || `Project ${projectId.slice(0, 8)}`;
+    const projectAddress = data.address !== undefined ? data.address : existingProject?.address;
+
     const { data: result, error } = await supabase
       .from('projects')
       .upsert({
         id: projectId,
-        name: data.name || `Project ${projectId.slice(0, 8)}`,
-        address: data.address,
+        name: projectName,
+        address: projectAddress,
         settings: data.settings || {},
         metadata: data.metadata || {},
         updated_at: new Date().toISOString(),

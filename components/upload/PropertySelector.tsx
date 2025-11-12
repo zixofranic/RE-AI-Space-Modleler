@@ -14,7 +14,6 @@ export function PropertySelector() {
   } = useStore();
 
   const [mode, setMode] = useState<'new' | 'existing'>('new');
-  const [newPropertyName, setNewPropertyName] = useState('');
   const [newPropertyAddress, setNewPropertyAddress] = useState('');
   const [selectedPropertyId, setSelectedPropertyId] = useState('');
 
@@ -23,13 +22,13 @@ export function PropertySelector() {
   }, [loadAvailableProperties]);
 
   const handleCreateNew = () => {
-    const name = newPropertyName.trim() || 'Untitled Property';
+    const address = newPropertyAddress.trim();
     const projectId = `project-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
     setCurrentProperty({
       id: projectId,
-      name,
-      address: newPropertyAddress.trim() || undefined,
+      name: address || 'Untitled Property', // Use address as name
+      address: address || undefined,
       isNew: true,
     });
   };
@@ -46,7 +45,7 @@ export function PropertySelector() {
     }
   };
 
-  const hasSelection = mode === 'new' ? newPropertyName.trim() : selectedPropertyId;
+  const hasSelection = mode === 'new' ? newPropertyAddress.trim() : selectedPropertyId;
 
   return (
     <div className="bg-white rounded-xl shadow-lg p-6 mb-8">
@@ -131,20 +130,7 @@ export function PropertySelector() {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-900 mb-2">
-                  Property Name *
-                </label>
-                <input
-                  type="text"
-                  value={newPropertyName}
-                  onChange={(e) => setNewPropertyName(e.target.value)}
-                  placeholder="e.g., 123 Main Street, Beach House, Downtown Condo"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-900 placeholder:text-gray-400"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-900 mb-2">
-                  Address (optional)
+                  Property Address *
                 </label>
                 <input
                   type="text"
@@ -153,11 +139,14 @@ export function PropertySelector() {
                   placeholder="e.g., 123 Main St, San Francisco, CA 94102"
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-900 placeholder:text-gray-400"
                 />
+                <p className="text-xs text-gray-600 mt-2">
+                  This address will be used as the project name
+                </p>
               </div>
 
               <Button
                 onClick={handleCreateNew}
-                disabled={!newPropertyName.trim()}
+                disabled={!newPropertyAddress.trim()}
                 className="w-full bg-purple-600 hover:bg-purple-700"
                 size="lg"
               >

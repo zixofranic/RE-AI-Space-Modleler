@@ -14,6 +14,7 @@ export function GenerationStep() {
     roomConfigs,
     roomAnalyses,
     projectId,
+    currentProperty,
     projectStyleGuide,
     enableSpatialConsistency,
     setStagingResult,
@@ -101,6 +102,8 @@ export function GenerationStep() {
             config,
             analysis, // Required for layered generation
             projectId, // Required for database save
+            projectName: currentProperty?.name, // Pass the property name to preserve it
+            projectAddress: currentProperty?.address, // Pass the address too
             globalSettings,
             projectStyleGuide, // Include style guide for consistency
             enableSpatialConsistency, // Pass toggle state
