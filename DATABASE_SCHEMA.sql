@@ -122,6 +122,24 @@ ON staging_results FOR UPDATE
 TO public
 USING (true);
 
+-- Allow anyone to delete projects
+CREATE POLICY "Allow public delete projects"
+ON projects FOR DELETE
+TO public
+USING (true);
+
+-- Allow anyone to delete images
+CREATE POLICY "Allow public delete images"
+ON images FOR DELETE
+TO public
+USING (true);
+
+-- Allow anyone to delete staging results
+CREATE POLICY "Allow public delete staging_results"
+ON staging_results FOR DELETE
+TO public
+USING (true);
+
 -- =============================================
 -- VERIFICATION
 -- =============================================

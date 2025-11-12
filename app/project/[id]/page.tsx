@@ -57,14 +57,21 @@ export default function ProjectDetailPage() {
 
   const handleDeleteProject = async () => {
     setDeleting(true);
+    console.log(`User confirmed deletion of project: ${projectId}`);
+
     try {
       const success = await deleteProject(projectId);
+      console.log(`Delete operation returned: ${success}`);
+
       if (success) {
+        console.log('Project deleted successfully, redirecting to projects page...');
         router.push('/projects');
       } else {
-        setError('Failed to delete project');
+        console.error('Delete operation failed - check browser console for details');
+        setError('Failed to delete project. Check if you have permission to delete (RLS policies may be blocking the operation).');
       }
     } catch (err) {
+      console.error('Exception during delete:', err);
       setError(err instanceof Error ? err.message : 'Failed to delete project');
     } finally {
       setDeleting(false);

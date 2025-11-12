@@ -466,7 +466,12 @@ export async function getEditHistory(stagingResultId: string) {
 // ============================================================================
 
 export async function deleteProject(projectId: string) {
-  if (!isSupabaseConfigured()) return false;
+  if (!isSupabaseConfigured()) {
+    console.error('Supabase is not configured');
+    return false;
+  }
+
+  console.log(`Starting deletion of project: ${projectId}`);
 
   try {
     // Delete all storage files for this project FIRST (before database cascades)
@@ -590,17 +595,33 @@ export async function deleteProject(projectId: string) {
     }
 
     // Delete project from database (will cascade delete all related data)
-    const { error: deleteProjectError } = await supabase
+    console.log('Attempting to delete project from database...');
+    const { error: deleteProjectError, status, statusText } = await supabase
       .from('projects')
       .delete()
       .eq('id', projectId);
 
     if (deleteProjectError) {
-      console.error('Error deleting project from database:', deleteProjectError);
+      console.error('❌ Error deleting project from database:', {
+        error: deleteProjectError,
+        status,
+        statusText,
+        message: deleteProjectError.message,
+        details: deleteProjectError.details,
+        hint: deleteProjectError.hint,
+        code: deleteProjectError.code
+      });
+
+      // Check if this is an RLS policy error
+      if (deleteProjectError.code === '42501' || deleteProjectError.message?.includes('policy')) {
+        console.error('⚠️ This appears to be a Row Level Security (RLS) policy issue.');
+        console.error('Make sure you have a DELETE policy for the projects table.');
+      }
+
       return false;
     }
 
-    console.log(`✅ Project ${projectId} deleted successfully`);
+    console.log(`✅ Project ${projectId} deleted successfully from database`);
     return true;
 
   } catch (error) {
