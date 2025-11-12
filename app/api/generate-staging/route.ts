@@ -195,26 +195,26 @@ export async function POST(request: NextRequest) {
 
     const inpaintingPrompt = `You are a professional virtual staging AI.
 
-TASK: Fill the white-masked area of this image with staged furniture.
-The mask (third image) shows which pixels you can edit:
-- BLACK pixels = FORBIDDEN - you CANNOT edit (walls, doors, windows, ceiling)
-- WHITE pixels = ALLOWED - you CAN edit (floor only)
-
-This is a TECHNICAL CONSTRAINT - black pixels are locked and cannot be modified.
-
-ROOM INFORMATION:
+ROOM ANALYSIS DATA:
 - Room type: ${roomType}
-- Detected ${doors} door(s) - these are BLACK in the mask (protected)
-- Detected ${windows} window(s) - these are BLACK in the mask (protected)
+- Number of doors: ${doors}
+- Number of windows: ${windows}
+
+CRITICAL INSTRUCTIONS:
+- You MUST keep all ${doors} door(s) completely visible and unobstructed
+- You MUST keep all ${windows} window(s) completely visible and unobstructed
+- Do NOT place any furniture in front of doors or windows
+- Maintain clear pathways to all doors (minimum 3 feet clearance)
 
 STAGING REQUIREMENTS:
 - Style: ${settings.designStyle || 'modern'}
 - Color palette: ${settings.colorPalette || 'neutral colors'}
 ${settings.customAdditions ? `- CUSTOM REQUESTS: ${settings.customAdditions}` : ''}
-- Add appropriate furniture ONLY to the WHITE floor area
+- Add furniture only to the floor area
 - Create realistic shadows for all furniture
+- Ensure all architectural elements (doors, windows) remain 100% visible
 
-The mask protects all architectural elements. Focus on beautiful staging within the allowed white floor area.
+Use the analysis data above to understand the room layout and stage accordingly.
 `;
 
     console.log('📝 STAGING PROMPT:');
@@ -224,10 +224,10 @@ The mask protects all architectural elements. Focus on beautiful staging within 
     console.log(`📊 Prompt info: doors=${doors}, windows=${windows}, roomType=${roomType}, style=${settings.designStyle || 'modern'}`);
 
     // ============================================================================
-    // STEP 3: Staging with mask (3-part API call)
+    // STEP 3: Staging with JSON analysis data (2-part API call)
     // ============================================================================
-    console.log('🎨 Step 3: Generating staged image with mask (3-part)...');
-    console.log(`🎨 Sending to gemini-2.5-flash-image: prompt + image + mask`);
+    console.log('🎨 Step 3: Generating staged image with JSON analysis...');
+    console.log(`🎨 Sending to gemini-2.5-flash-image: prompt (with JSON data) + image`);
 
     const parts: any[] = [
       { text: inpaintingPrompt },
@@ -237,12 +237,7 @@ The mask protects all architectural elements. Focus on beautiful staging within 
           data: imageBase64,
         },
       },
-      {
-        inlineData: {
-          mimeType: 'image/png',
-          data: maskBase64,
-        },
-      },
+      // MASK BYPASSED - Using JSON analysis data in prompt instead
     ];
 
     const result = await model.generateContent({
