@@ -183,11 +183,11 @@ export default function ProjectDetailPage() {
                       <p className="text-center mt-2 text-sm font-semibold text-gray-900">Original</p>
                     </div>
 
-                    {/* Staged Versions - Only show first 3, use thumbnails */}
+                    {/* Staged Versions - Only show first 3 */}
                     {versions.slice(0, 3).map((version, idx) => (
                       <div key={idx} className="cursor-pointer" onClick={() => openPhotoViewer(allImages, idx + 1)}>
                         <img
-                          src={version.stagedThumbnailUrl || version.stagedImageUrl}
+                          src={version.stagedImageUrl}
                           alt={`Version ${idx + 1}`}
                           loading="lazy"
                           className="w-full aspect-video object-cover rounded-lg border-2 border-gray-200 hover:border-purple-500 transition-all hover:opacity-80"
