@@ -116,38 +116,65 @@ export function CustomizeView() {
           )}
 
       {/* Preset Selector */}
-      {selectedMode === 'preset' && (
-        <>
-          <PresetMode />
-
-          {/* Custom Requests for Preset Mode */}
-          <div className="bg-white rounded-2xl border-2 border-gray-200 p-6">
-            <Label htmlFor="custom-requests" className="text-lg font-semibold text-gray-900 mb-2 block">
-              Custom Requests (Optional)
-            </Label>
-            <p className="text-sm text-gray-600 mb-4">
-              Add any specific requests or preferences for your staging. For example: "Add a fireplace mantel", "Include children's toys in bedroom", "Modern farmhouse style kitchen"
-            </p>
-            <Textarea
-              id="custom-requests"
-              placeholder="Type your custom staging requests here... (e.g., 'Add a home office setup', 'Include pet-friendly furniture', 'Coastal color palette')"
-              value={customRequests}
-              onChange={(e) => handleCustomRequestsChange(e.target.value)}
-              rows={5}
-              className="w-full resize-none text-base"
-            />
-            <div className="mt-2 text-xs text-gray-500">
-              {customRequests.length} characters
-            </div>
-          </div>
-        </>
-      )}
+      {selectedMode === 'preset' && <PresetMode />}
 
       {/* Guided Mode - Questionnaire */}
       {selectedMode === 'guided' && <GuidedMode />}
 
       {/* Expert Mode - Full Control */}
       {selectedMode === 'expert' && <ExpertMode />}
+
+      {/* Custom Details Section - Available for ALL modes */}
+      {selectedMode && (
+        <div className="bg-gradient-to-br from-white to-purple-50 rounded-2xl border-2 border-purple-200 p-6 shadow-sm">
+          <div className="flex items-center gap-2 mb-2">
+            <Label htmlFor="custom-requests" className="text-lg font-bold text-gray-900">
+              ✨ Additional Details & Custom Requests
+            </Label>
+            <span className="px-2 py-1 bg-purple-100 text-purple-700 text-xs font-semibold rounded">
+              Optional
+            </span>
+          </div>
+          <p className="text-sm text-gray-700 mb-4">
+            Add any specific requests, preferences, or details to refine your staging. The AI will incorporate these alongside your {selectedMode === 'preset' ? 'preset' : selectedMode} settings.
+          </p>
+
+          <div className="bg-white rounded-lg border border-gray-200 p-4 mb-4">
+            <p className="text-xs font-semibold text-gray-900 mb-2">💡 Examples:</p>
+            <ul className="text-xs text-gray-700 space-y-1">
+              <li>• "Add a fireplace mantel with decorative items"</li>
+              <li>• "Include a home office setup with desk and bookshelf"</li>
+              <li>• "Pet-friendly furniture with washable fabrics"</li>
+              <li>• "Children's bedroom with toy storage"</li>
+              <li>• "Add indoor plants in corners"</li>
+              <li>• "Include a reading nook by the window"</li>
+              <li>• "Coastal-inspired color accents"</li>
+            </ul>
+          </div>
+
+          <Textarea
+            id="custom-requests"
+            placeholder="Type your custom staging requests here... Be as specific or general as you like. Multiple requests are welcome!"
+            value={customRequests}
+            onChange={(e) => handleCustomRequestsChange(e.target.value)}
+            rows={6}
+            className="w-full resize-none text-base border-gray-300 focus:border-purple-400 focus:ring-purple-400"
+          />
+          <div className="flex items-center justify-between mt-2">
+            <div className="text-xs text-gray-500">
+              {customRequests.length} characters
+            </div>
+            {customRequests.length > 0 && (
+              <button
+                onClick={() => handleCustomRequestsChange('')}
+                className="text-xs text-purple-600 hover:text-purple-700 font-medium"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+        </div>
+      )}
         </div>
       </div>
     </div>
