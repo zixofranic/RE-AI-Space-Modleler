@@ -252,6 +252,11 @@ Use the analysis data above to understand the room layout and stage accordingly.
     const response = await result.response;
 
     console.log('🎨 STAGING - Response received');
+    console.log('🔍 DEBUG - Full response:', JSON.stringify({
+      candidatesCount: response.candidates?.length || 0,
+      promptFeedback: response.promptFeedback,
+      usageMetadata: response.usageMetadata,
+    }, null, 2));
 
     // Check if response contains generated image
     const candidates = response.candidates;
@@ -260,9 +265,21 @@ Use the analysis data above to understand the room layout and stage accordingly.
 
     console.log(`🎨 STAGING - Candidates: ${candidates?.length || 0}`);
 
+    // Log finish reason for each candidate
+    if (candidates && candidates.length > 0) {
+      candidates.forEach((candidate: any, idx: number) => {
+        console.log(`🔍 DEBUG - Candidate ${idx}: finishReason=${candidate.finishReason}, safetyRatings=${JSON.stringify(candidate.safetyRatings)}`);
+      });
+    }
+
     if (candidates && candidates.length > 0 && candidates[0].content) {
       const parts = candidates[0].content.parts;
       console.log(`🎨 STAGING - Parts in response: ${parts.length}`);
+
+      // Debug: Show what types of parts we got
+      parts.forEach((part: any, idx: number) => {
+        console.log(`🔍 DEBUG - Part ${idx}: hasText=${!!part.text}, hasInlineData=${!!part.inlineData}, textLength=${part.text?.length || 0}`);
+      });
 
       // Look for inline data (generated image)
       const imagePart = parts.find((part: any) => part.inlineData);
