@@ -274,15 +274,20 @@ export const useStore = create<AppState & AppActions>()(
           const existingResults = state.stagingResults[imageId] || [];
           const versionNumber = existingResults.length;
 
-          // Upload to Supabase
-          supabaseUrl = await uploadStagedImage(state.projectId, imageId, blob, versionNumber);
+          // Upload to Supabase (generates both full-size and thumbnail)
+          const uploadResult = await uploadStagedImage(state.projectId, imageId, blob, versionNumber);
+          supabaseUrl = uploadResult.fullUrl;
 
           if (supabaseUrl) {
             console.log(`✅ Staged image uploaded to Supabase: ${supabaseUrl}`);
-            // Replace data URL with Supabase URL
+            if (uploadResult.thumbnailUrl) {
+              console.log(`✅ Thumbnail generated: ${uploadResult.thumbnailUrl}`);
+            }
+            // Replace data URL with Supabase URLs
             processedResult = {
               ...result,
               stagedImageUrl: supabaseUrl,
+              stagedThumbnailUrl: uploadResult.thumbnailUrl || undefined,
             };
           } else {
             console.warn(`⚠️ Supabase upload failed for staged image ${imageId}`);

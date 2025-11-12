@@ -111,6 +111,7 @@ export interface StagingResult {
   description: string;
   suggestions: string;
   stagedImageUrl: string;
+  stagedThumbnailUrl?: string; // Thumbnail for grid display
   details?: any;
   layers?: LayerResult[];
   isLayered?: boolean;

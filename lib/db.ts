@@ -7,6 +7,7 @@ import type {
   StagingResult,
   AppState,
 } from '@/types';
+import sharp from 'sharp';
 
 // ============================================================================
 // PROJECT MANAGEMENT
@@ -319,12 +320,13 @@ export async function uploadStagedImage(
   imageId: string,
   imageBlob: Blob,
   editNumber: number = 0
-): Promise<string | null> {
-  if (!isSupabaseConfigured()) return null;
+): Promise<{ fullUrl: string; thumbnailUrl: string | null }> {
+  if (!isSupabaseConfigured()) return { fullUrl: '', thumbnailUrl: null };
 
   const filename = editNumber === 0 ? 'final.png' : `edit-${editNumber}.png`;
   const filePath = `${projectId}/${imageId}/${filename}`;
 
+  // Upload full-size image
   const { data, error } = await supabase.storage
     .from(STORAGE_BUCKETS.STAGED_IMAGES)
     .upload(filePath, imageBlob, {
@@ -334,15 +336,53 @@ export async function uploadStagedImage(
 
   if (error) {
     console.error('Error uploading staged image:', error);
-    return null;
+    return { fullUrl: '', thumbnailUrl: null };
   }
 
-  // Get public URL
+  // Get public URL for full-size image
   const { data: urlData } = supabase.storage
     .from(STORAGE_BUCKETS.STAGED_IMAGES)
     .getPublicUrl(filePath);
 
-  return urlData.publicUrl;
+  // Generate and upload thumbnail
+  let thumbnailUrl: string | null = null;
+  try {
+    const arrayBuffer = await imageBlob.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    // Generate 300px wide thumbnail (maintains aspect ratio)
+    const thumbnailBuffer = await sharp(buffer)
+      .resize(300, null, {
+        fit: 'inside',
+        withoutEnlargement: true,
+      })
+      .jpeg({ quality: 80 })
+      .toBuffer();
+
+    // Upload thumbnail
+    const thumbnailFilename = editNumber === 0 ? 'final_thumb.jpg' : `edit-${editNumber}_thumb.jpg`;
+    const thumbnailPath = `${projectId}/${imageId}/${thumbnailFilename}`;
+
+    const { error: thumbError } = await supabase.storage
+      .from(STORAGE_BUCKETS.STAGED_IMAGES)
+      .upload(thumbnailPath, thumbnailBuffer, {
+        contentType: 'image/jpeg',
+        cacheControl: '3600',
+        upsert: true,
+      });
+
+    if (!thumbError) {
+      const { data: thumbUrlData } = supabase.storage
+        .from(STORAGE_BUCKETS.STAGED_IMAGES)
+        .getPublicUrl(thumbnailPath);
+
+      thumbnailUrl = thumbUrlData.publicUrl;
+    }
+  } catch (thumbError) {
+    console.warn('Failed to generate thumbnail, continuing without it:', thumbError);
+  }
+
+  return { fullUrl: urlData.publicUrl, thumbnailUrl };
 }
 
 export async function saveStagingResult(imageId: string, result: StagingResult) {
