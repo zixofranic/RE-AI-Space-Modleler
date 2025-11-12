@@ -33,7 +33,8 @@ export default function MyProjectsPage() {
     setLoading(true);
     setError(undefined);
 
-    const result = await getProjectsWithThumbnails(50);
+    // Reduced limit from 50 to 20 for faster initial load
+    const result = await getProjectsWithThumbnails(20);
 
     if (result.success && result.data) {
       setProjects(result.data as ProjectWithImages[]);
@@ -152,6 +153,7 @@ export default function MyProjectsPage() {
                       <img
                         src={firstImage.thumbnail_url || firstImage.original_url}
                         alt={project.name}
+                        loading="lazy"
                         className="w-full h-full object-cover"
                       />
                     ) : (

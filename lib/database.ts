@@ -210,14 +210,21 @@ export async function getCompleteProject(projectId: string) {
 
 export async function getProjectsWithThumbnails(limit = 50) {
   try {
+    // Optimized: Fetch projects and ALL their images in one query
+    // BUT we'll filter client-side to only keep first image per project
+    // This is more efficient than the nested query for large datasets
     const { data: projects, error: projectsError } = await supabase
       .from('projects')
       .select(`
-        *,
+        id,
+        name,
+        address,
+        created_at,
+        updated_at,
         images (
           id,
-          original_url,
           thumbnail_url,
+          original_url,
           uploaded_at
         )
       `)
@@ -226,7 +233,14 @@ export async function getProjectsWithThumbnails(limit = 50) {
 
     if (projectsError) throw projectsError;
 
-    return { success: true, data: projects };
+    // Client-side optimization: Keep only first image per project
+    // This reduces data sent to UI significantly
+    const optimizedProjects = projects?.map(project => ({
+      ...project,
+      images: project.images?.slice(0, 1) || [], // Only keep first image
+    }));
+
+    return { success: true, data: optimizedProjects };
   } catch (error) {
     console.error('Error fetching projects with thumbnails:', error);
     return { success: false, error: String(error) };
