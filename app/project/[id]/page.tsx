@@ -134,15 +134,29 @@ export default function ProjectDetailPage() {
               <ArrowLeft className="w-4 h-4 mr-2" />
               Back to Projects
             </Link>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowDeleteConfirm(true)}
-              className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-300"
-            >
-              <Trash2 className="w-4 h-4 mr-2" />
-              Delete Project
-            </Button>
+
+            <div className="flex items-center gap-3">
+              <Link href="/">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="bg-purple-600 text-white hover:bg-purple-700 border-purple-600"
+                >
+                  <Edit className="w-4 h-4 mr-2" />
+                  New Project
+                </Button>
+              </Link>
+
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowDeleteConfirm(true)}
+                className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-300"
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
+                Delete Project
+              </Button>
+            </div>
           </div>
           <h1 className="text-4xl font-bold text-gray-900 mb-2">
             {currentProperty?.name !== 'Untitled Project'

@@ -63,8 +63,29 @@ export default function Home() {
               </div>
             </div>
 
-            {/* User Menu */}
-            <UserMenu />
+            <div className="flex items-center gap-4">
+              {/* Navigation Buttons */}
+              <Link href="/projects">
+                <Button variant="outline" size="sm" className="flex items-center gap-2">
+                  <FolderOpen className="w-4 h-4" />
+                  My Projects
+                </Button>
+              </Link>
+
+              <Link href="/">
+                <Button variant="outline" size="sm" className="flex items-center gap-2" onClick={() => {
+                  // Clear current project when starting new
+                  const store = useStore.getState();
+                  store.clearProject();
+                }}>
+                  <Sparkles className="w-4 h-4" />
+                  New Project
+                </Button>
+              </Link>
+
+              {/* User Menu */}
+              <UserMenu />
+            </div>
           </div>
         </div>
       </header>

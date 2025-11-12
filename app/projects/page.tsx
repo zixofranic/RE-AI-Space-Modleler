@@ -78,6 +78,14 @@ export default function MyProjectsPage() {
             </div>
 
             <div className="flex items-center gap-3">
+              <Link
+                href="/"
+                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-medium flex items-center gap-2"
+              >
+                <Edit className="w-4 h-4" />
+                Create New Project
+              </Link>
+
               <button
                 onClick={loadProjects}
                 disabled={loading}
