@@ -61,6 +61,7 @@ Thumbs.db
 # Temporary files
 tmp/
 temp/
+temp_can delete/
 
 # Next.js
 .next/
@@ -69,3 +70,14 @@ out/
 # Old subdirectory (deprecated)
 ai-staging-app/
 nul
+
+# Apple Private Keys (NEVER COMMIT THESE!)
+*.p8
+AuthKey_*.p8
+
+# Build outputs
+build-output.txt
+build-check.txt
+
+# Supabase local files
+supabase/.temp/
