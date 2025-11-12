@@ -397,11 +397,11 @@ The mask protects all architectural elements. Focus on beautiful staging within 
     };
 
     // ============================================================================
-    // SAVE TO DATABASE
+    // SAVE PROJECT AND IMAGE TO DATABASE (NOT THE RESULT - CLIENT WILL DO THAT)
     // ============================================================================
     try {
       console.log('🔍 Starting database save...');
-      const { saveProject, saveImage, saveStagingResult } = await import('@/lib/database');
+      const { saveProject, saveImage } = await import('@/lib/database');
       const projectId = body.projectId || body.analysis?.projectId || 'default';
       console.log(`🔍 Project ID: ${projectId}`);
 
@@ -430,26 +430,9 @@ The mask protects all architectural elements. Focus on beautiful staging within 
         console.log(`✅ Image saved to database: ${body.imageId}`);
       }
 
-      // 3. Save staging result to database
-      const resultId = `result-${body.imageId}-${Date.now()}`;
-      await saveStagingResult({
-        id: resultId,
-        imageId: body.imageId,
-        projectId: projectId,
-        stagedUrl: stagedImageUrl,
-        stagedThumbnailUrl: stagedThumbnailUrl || undefined,
-        config: body.config,
-        description: description,
-        suggestions: suggestions || `Staged with ${settings.designStyle || 'modern'} furniture and ${settings.colorPalette || 'neutral'} color palette.`,
-        details: {
-          furniturePieces: [],
-          colorScheme: settings.colorPalette || '',
-          decorElements: [],
-          furnitureLayout: '',
-          textiles: settings.rugStyle || '',
-        }
-      });
-      console.log(`✅ Staging result saved to database: ${resultId}`);
+      // REMOVED: Don't save staging result here - the client will do it via setStagingResult()
+      // This prevents duplicate entries in the database
+      console.log(`✅ Staging result will be saved by client to avoid duplicates`);
     } catch (dbError) {
       console.error('❌❌❌ DATABASE SAVE FAILED ❌❌❌');
       console.error('Error details:', dbError);

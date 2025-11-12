@@ -494,31 +494,47 @@ export async function deleteProject(projectId: string) {
       }
     }
 
-    // Delete staged images
-    const { data: stagedFiles, error: listStagedError } = await supabase.storage
+    // Delete staged images (nested: projectId/imageId/filename.png)
+    const { data: stagedFolders, error: listStagedError } = await supabase.storage
       .from(STORAGE_BUCKETS.STAGED_IMAGES)
       .list(projectId);
 
     if (listStagedError) {
-      console.warn('Warning listing staged images:', listStagedError);
+      console.warn('Warning listing staged image folders:', listStagedError);
     }
 
-    if (stagedFiles && stagedFiles.length > 0) {
-      const filesToDelete = stagedFiles.map((file) => `${projectId}/${file.name}`);
-      console.log(`Deleting ${filesToDelete.length} staged images...`);
+    // For each imageId folder, list and delete all files inside
+    if (stagedFolders && stagedFolders.length > 0) {
+      console.log(`Found ${stagedFolders.length} image folders in staged-images...`);
 
-      const { error: deleteStagedError } = await supabase.storage
-        .from(STORAGE_BUCKETS.STAGED_IMAGES)
-        .remove(filesToDelete);
+      for (const folder of stagedFolders) {
+        // List files inside this imageId folder
+        const { data: filesInFolder, error: listFilesError } = await supabase.storage
+          .from(STORAGE_BUCKETS.STAGED_IMAGES)
+          .list(`${projectId}/${folder.name}`);
 
-      if (deleteStagedError) {
-        console.error('Error deleting staged images:', deleteStagedError);
-        // Continue anyway - database deletion is more important
+        if (listFilesError) {
+          console.warn(`Warning listing files in folder ${folder.name}:`, listFilesError);
+          continue;
+        }
+
+        if (filesInFolder && filesInFolder.length > 0) {
+          const filePaths = filesInFolder.map((file) => `${projectId}/${folder.name}/${file.name}`);
+          console.log(`Deleting ${filePaths.length} files from ${folder.name}...`);
+
+          const { error: deleteFilesError } = await supabase.storage
+            .from(STORAGE_BUCKETS.STAGED_IMAGES)
+            .remove(filePaths);
+
+          if (deleteFilesError) {
+            console.error(`Error deleting files from ${folder.name}:`, deleteFilesError);
+          }
+        }
       }
     }
 
-    // Delete thumbnails
-    const { data: thumbnailFiles, error: listThumbnailError } = await supabase.storage
+    // Delete thumbnails (may be nested like staged images)
+    const { data: thumbnailItems, error: listThumbnailError } = await supabase.storage
       .from(STORAGE_BUCKETS.THUMBNAILS)
       .list(projectId);
 
@@ -526,17 +542,50 @@ export async function deleteProject(projectId: string) {
       console.warn('Warning listing thumbnails:', listThumbnailError);
     }
 
-    if (thumbnailFiles && thumbnailFiles.length > 0) {
-      const filesToDelete = thumbnailFiles.map((file) => `${projectId}/${file.name}`);
-      console.log(`Deleting ${filesToDelete.length} thumbnails...`);
+    if (thumbnailItems && thumbnailItems.length > 0) {
+      console.log(`Found ${thumbnailItems.length} items in thumbnails...`);
 
-      const { error: deleteThumbnailError } = await supabase.storage
-        .from(STORAGE_BUCKETS.THUMBNAILS)
-        .remove(filesToDelete);
+      // Check if items are files or folders
+      const directFiles = thumbnailItems.filter(item => item.id); // Files have IDs
+      const folders = thumbnailItems.filter(item => !item.id); // Folders don't
 
-      if (deleteThumbnailError) {
-        console.error('Error deleting thumbnails:', deleteThumbnailError);
-        // Continue anyway
+      // Delete direct files
+      if (directFiles.length > 0) {
+        const filePaths = directFiles.map((file) => `${projectId}/${file.name}`);
+        console.log(`Deleting ${filePaths.length} thumbnail files...`);
+
+        const { error: deleteError } = await supabase.storage
+          .from(STORAGE_BUCKETS.THUMBNAILS)
+          .remove(filePaths);
+
+        if (deleteError) {
+          console.error('Error deleting thumbnail files:', deleteError);
+        }
+      }
+
+      // Delete nested files in folders
+      for (const folder of folders) {
+        const { data: filesInFolder, error: listFilesError } = await supabase.storage
+          .from(STORAGE_BUCKETS.THUMBNAILS)
+          .list(`${projectId}/${folder.name}`);
+
+        if (listFilesError) {
+          console.warn(`Warning listing files in thumbnail folder ${folder.name}:`, listFilesError);
+          continue;
+        }
+
+        if (filesInFolder && filesInFolder.length > 0) {
+          const filePaths = filesInFolder.map((file) => `${projectId}/${folder.name}/${file.name}`);
+          console.log(`Deleting ${filePaths.length} files from thumbnail folder ${folder.name}...`);
+
+          const { error: deleteFilesError } = await supabase.storage
+            .from(STORAGE_BUCKETS.THUMBNAILS)
+            .remove(filePaths);
+
+          if (deleteFilesError) {
+            console.error(`Error deleting files from thumbnail folder ${folder.name}:`, deleteFilesError);
+          }
+        }
       }
     }
 
