@@ -210,37 +210,56 @@ export async function getCompleteProject(projectId: string) {
 
 export async function getProjectsWithThumbnails(limit = 50) {
   try {
-    // Optimized: Fetch projects and ALL their images in one query
-    // BUT we'll filter client-side to only keep first image per project
-    // This is more efficient than the nested query for large datasets
+    // Step 1: Fetch projects ONLY (no images) - super fast
     const { data: projects, error: projectsError } = await supabase
       .from('projects')
-      .select(`
-        id,
-        name,
-        address,
-        created_at,
-        updated_at,
-        images (
-          id,
-          thumbnail_url,
-          original_url,
-          uploaded_at
-        )
-      `)
+      .select('id, name, address, created_at, updated_at')
       .order('updated_at', { ascending: false })
       .limit(limit);
 
     if (projectsError) throw projectsError;
+    if (!projects || projects.length === 0) {
+      return { success: true, data: [] };
+    }
 
-    // Client-side optimization: Keep only first image per project
-    // This reduces data sent to UI significantly
-    const optimizedProjects = projects?.map(project => ({
-      ...project,
-      images: project.images?.slice(0, 1) || [], // Only keep first image
-    }));
+    // Step 2: Fetch ONLY first image per project (much faster)
+    const projectIds = projects.map(p => p.id);
 
-    return { success: true, data: optimizedProjects };
+    // Get all images but we'll filter to first per project
+    const { data: allImages, error: imagesError } = await supabase
+      .from('images')
+      .select('id, project_id, thumbnail_url, original_url, uploaded_at')
+      .in('project_id', projectIds)
+      .order('uploaded_at', { ascending: true });
+
+    if (imagesError) throw imagesError;
+
+    // Create a map of projectId -> first image + total count
+    const projectImageMap = new Map();
+    allImages?.forEach(img => {
+      if (!projectImageMap.has(img.project_id)) {
+        // First image for this project - keep it
+        projectImageMap.set(img.project_id, {
+          firstImage: img,
+          count: 1
+        });
+      } else {
+        // Additional image - just increment count
+        projectImageMap.get(img.project_id).count++;
+      }
+    });
+
+    // Step 3: Combine projects with their first image
+    const projectsWithThumbnails = projects.map(project => {
+      const imageData = projectImageMap.get(project.id);
+      return {
+        ...project,
+        images: imageData ? [imageData.firstImage] : [],
+        _imageCount: imageData ? imageData.count : 0,
+      };
+    });
+
+    return { success: true, data: projectsWithThumbnails };
   } catch (error) {
     console.error('Error fetching projects with thumbnails:', error);
     return { success: false, error: String(error) };

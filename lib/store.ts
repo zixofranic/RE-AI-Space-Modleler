@@ -408,15 +408,40 @@ export const useStore = create<AppState & AppActions>()(
 
       const images = imagesData || [];
 
-      // Load staging results for each image
+      // Load staging results for ALL images in ONE query (performance fix)
       const allStagingResults: Record<string, StagingResult[]> = {};
       const allAnalyses: Record<string, RoomAnalysis> = {};
 
-      for (const img of images) {
-        const resultsData = await getStagingResultsForImage(img.id);
-        if (resultsData.success && resultsData.data) {
-          allStagingResults[img.id] = resultsData.data;
+      // Fetch all staging results for the project in a single query
+      if (images.length > 0) {
+        const { data: allResults, error: resultsError } = await supabase
+          .from('staging_results')
+          .select('*')
+          .eq('project_id', projectId)
+          .order('created_at', { ascending: true });
+
+        if (!resultsError && allResults) {
+          // Group results by image_id
+          allResults.forEach((row: any) => {
+            if (!allStagingResults[row.image_id]) {
+              allStagingResults[row.image_id] = [];
+            }
+            allStagingResults[row.image_id].push({
+              imageId: row.image_id,
+              roomType: row.room_type || 'Room',
+              description: row.description || '',
+              suggestions: row.suggestions || '',
+              stagedImageUrl: row.staged_url,
+              details: row.details || {},
+              layers: row.layers,
+              isLayered: row.is_layered,
+            });
+          });
         }
+      }
+
+      // Extract analyses from images
+      for (const img of images) {
         if (img.analysis) {
           allAnalyses[img.id] = img.analysis;
         }
