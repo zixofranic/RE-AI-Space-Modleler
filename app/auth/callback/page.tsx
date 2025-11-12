@@ -9,22 +9,49 @@ export default function AuthCallback() {
 
   useEffect(() => {
     const handleCallback = async () => {
-      // The OAuth provider will redirect here with a code
-      // Supabase automatically handles the token exchange
-      const { data: { session }, error } = await supabase.auth.getSession();
+      try {
+        // Check if there's a hash fragment with tokens (OAuth implicit flow)
+        const hashParams = new URLSearchParams(window.location.hash.substring(1));
+        const accessToken = hashParams.get('access_token');
+        const refreshToken = hashParams.get('refresh_token');
 
-      if (error) {
-        console.error('Error during auth callback:', error);
-        router.push('/login?error=auth_failed');
-        return;
-      }
+        if (accessToken && refreshToken) {
+          // Set the session from the tokens
+          const { error: sessionError } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          });
 
-      if (session) {
-        // Successfully authenticated - redirect to home
-        router.push('/');
-      } else {
-        // No session - redirect to login
-        router.push('/login');
+          if (sessionError) {
+            console.error('Error setting session:', sessionError);
+            router.replace('/login?error=auth_failed');
+            return;
+          }
+
+          // Successfully authenticated - redirect to home with clean URL
+          router.replace('/');
+          return;
+        }
+
+        // Fallback: try to get existing session
+        const { data: { session }, error } = await supabase.auth.getSession();
+
+        if (error) {
+          console.error('Error during auth callback:', error);
+          router.replace('/login?error=auth_failed');
+          return;
+        }
+
+        if (session) {
+          // Successfully authenticated - redirect to home
+          router.replace('/');
+        } else {
+          // No session - redirect to login
+          router.replace('/login');
+        }
+      } catch (err) {
+        console.error('Unexpected error in auth callback:', err);
+        router.replace('/login?error=auth_failed');
       }
     };
 
