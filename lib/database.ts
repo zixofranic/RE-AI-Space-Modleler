@@ -109,6 +109,7 @@ export async function saveStagingResult(resultData: {
   imageId: string;
   projectId: string;
   stagedUrl: string;
+  stagedThumbnailUrl?: string;
   config?: any;
   description?: string;
   suggestions?: string;
@@ -123,6 +124,7 @@ export async function saveStagingResult(resultData: {
         image_id: resultData.imageId,
         project_id: resultData.projectId,
         staged_url: resultData.stagedUrl,
+        staged_thumbnail_url: resultData.stagedThumbnailUrl,
         config: resultData.config || {},
         description: resultData.description || '',
         suggestions: resultData.suggestions || '',

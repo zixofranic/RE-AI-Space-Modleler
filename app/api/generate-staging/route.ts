@@ -261,6 +261,7 @@ The mask protects all architectural elements. Focus on beautiful staging within 
     // Check if response contains generated image
     const candidates = response.candidates;
     let stagedImageUrl = body.imageDataUrl; // Fallback to original
+    let stagedThumbnailUrl: string | null = null; // Store thumbnail URL
 
     console.log(`🎨 STAGING - Candidates: ${candidates?.length || 0}`);
 
@@ -279,8 +280,78 @@ The mask protects all architectural elements. Focus on beautiful staging within 
 
         console.log(`✅ STAGING - Success! Generated image: mimeType=${generatedMimeType}, dataLength=${generatedData.length}`);
 
-        // Return data URL - the store's setStagingResult will handle Supabase upload
-        stagedImageUrl = `data:${generatedMimeType};base64,${generatedData}`;
+        // Upload to Supabase immediately (server-side) with thumbnail generation
+        try {
+          const projectId = body.projectId || body.analysis?.projectId || 'default';
+          const buffer = Buffer.from(generatedData, 'base64');
+
+          // Generate thumbnail (300px wide)
+          console.log('📸 Generating thumbnail...');
+          const thumbnailBuffer = await sharp(buffer)
+            .resize(300, null, {
+              fit: 'inside',
+              withoutEnlargement: true,
+            })
+            .jpeg({ quality: 80 })
+            .toBuffer();
+
+          // Get existing results count for version number
+          const { data: existingResults } = await supabase
+            .from('staging_results')
+            .select('id')
+            .eq('image_id', body.imageId)
+            .eq('project_id', projectId);
+
+          const versionNumber = existingResults?.length || 0;
+          const filename = versionNumber === 0 ? 'final.png' : `edit-${versionNumber}.png`;
+          const thumbFilename = versionNumber === 0 ? 'final_thumb.jpg' : `edit-${versionNumber}_thumb.jpg`;
+          const filePath = `${projectId}/${body.imageId}/${filename}`;
+          const thumbPath = `${projectId}/${body.imageId}/${thumbFilename}`;
+
+          // Upload full-size image
+          console.log(`📤 Uploading full-size to: ${filePath}`);
+          const { error: uploadError } = await supabase.storage
+            .from('staged-images')
+            .upload(filePath, buffer, {
+              contentType: generatedMimeType,
+              cacheControl: '3600',
+              upsert: true,
+            });
+
+          if (uploadError) throw uploadError;
+
+          // Upload thumbnail
+          console.log(`📤 Uploading thumbnail to: ${thumbPath}`);
+          const { error: thumbError } = await supabase.storage
+            .from('staged-images')
+            .upload(thumbPath, thumbnailBuffer, {
+              contentType: 'image/jpeg',
+              cacheControl: '3600',
+              upsert: true,
+            });
+
+          if (thumbError) console.warn('⚠️ Thumbnail upload failed:', thumbError);
+
+          // Get public URLs
+          const { data: fullUrlData } = supabase.storage
+            .from('staged-images')
+            .getPublicUrl(filePath);
+
+          const { data: thumbUrlData } = supabase.storage
+            .from('staged-images')
+            .getPublicUrl(thumbPath);
+
+          stagedImageUrl = fullUrlData.publicUrl;
+          stagedThumbnailUrl = thumbError ? null : thumbUrlData.publicUrl;
+
+          console.log(`✅ Uploaded full-size: ${stagedImageUrl}`);
+          if (stagedThumbnailUrl) console.log(`✅ Uploaded thumbnail: ${stagedThumbnailUrl}`);
+
+        } catch (uploadError) {
+          console.error('❌ Upload error:', uploadError);
+          // Fallback to data URL
+          stagedImageUrl = `data:${generatedMimeType};base64,${generatedData}`;
+        }
       } else {
         console.warn('⚠️ STAGING - No image in response, using fallback (original image)');
       }
@@ -315,6 +386,7 @@ The mask protects all architectural elements. Focus on beautiful staging within 
       description,
       suggestions: suggestions || `Staged with ${settings.designStyle || 'modern'} furniture and ${settings.colorPalette || 'neutral'} color palette.`,
       stagedImageUrl, // Now contains the actual generated image!
+      stagedThumbnailUrl, // Thumbnail URL if generated
       details: {
         furniturePieces: [],
         colorScheme: settings.colorPalette || '',
@@ -365,6 +437,7 @@ The mask protects all architectural elements. Focus on beautiful staging within 
         imageId: body.imageId,
         projectId: projectId,
         stagedUrl: stagedImageUrl,
+        stagedThumbnailUrl: stagedThumbnailUrl || undefined,
         config: body.config,
         description: description,
         suggestions: suggestions || `Staged with ${settings.designStyle || 'modern'} furniture and ${settings.colorPalette || 'neutral'} color palette.`,

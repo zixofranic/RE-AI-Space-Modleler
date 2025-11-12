@@ -432,6 +432,7 @@ export const useStore = create<AppState & AppActions>()(
               description: row.description || '',
               suggestions: row.suggestions || '',
               stagedImageUrl: row.staged_url,
+              stagedThumbnailUrl: row.staged_thumbnail_url,
               details: row.details || {},
               layers: row.layers,
               isLayered: row.is_layered,
