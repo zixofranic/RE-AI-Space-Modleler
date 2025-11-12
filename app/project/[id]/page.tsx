@@ -30,6 +30,7 @@ export default function ProjectDetailPage() {
   const [viewerIndex, setViewerIndex] = useState(0);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [expandedImageId, setExpandedImageId] = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -160,82 +161,85 @@ export default function ProjectDetailPage() {
               }))
             ];
 
+            const isExpanded = expandedImageId === image.id;
+
             return (
               <div key={image.id} className="bg-white rounded-xl shadow-lg overflow-hidden">
-                <div className="p-6">
-                  <div className="mb-4">
-                    <h3 className="text-lg font-semibold text-gray-900">{image.name}</h3>
-                    <p className="text-sm text-gray-900 mt-1 font-medium">
-                      {versions.length} version{versions.length !== 1 ? 's' : ''}
-                      {!canEdit && <span className="ml-2 text-amber-600 font-semibold">(Maximum {MAX_VERSIONS_PER_IMAGE} versions reached)</span>}
-                    </p>
-                  </div>
-
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    {/* Original Image - Use thumbnail for grid */}
-                    <div className="cursor-pointer" onClick={() => openPhotoViewer(allImages, 0)}>
-                      <img
-                        src={image.thumbnailUrl || image.dataUrl}
-                        alt="Original"
-                        loading="lazy"
-                        className="w-full aspect-video object-cover rounded-lg border-2 border-gray-200 hover:border-purple-500 transition-all hover:opacity-80"
-                      />
-                      <p className="text-center mt-2 text-sm font-semibold text-gray-900">Original</p>
+                <div
+                  className="p-6 cursor-pointer hover:bg-gray-50 transition-colors"
+                  onClick={() => setExpandedImageId(isExpanded ? null : image.id)}
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-900">{image.name}</h3>
+                      <p className="text-sm text-gray-900 mt-1 font-medium">
+                        {versions.length} version{versions.length !== 1 ? 's' : ''}
+                        {!canEdit && <span className="ml-2 text-amber-600 font-semibold">(Maximum {MAX_VERSIONS_PER_IMAGE} versions reached)</span>}
+                      </p>
                     </div>
+                    <div className="text-gray-500">
+                      {isExpanded ? '▼' : '▶'}
+                    </div>
+                  </div>
+                </div>
 
-                    {/* Staged Versions - Only show first 3, use thumbnails */}
-                    {versions.slice(0, 3).map((version, idx) => (
-                      <div key={idx} className="cursor-pointer" onClick={() => openPhotoViewer(allImages, idx + 1)}>
+                {isExpanded && (
+                  <div className="p-6 pt-0">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      {/* Original Image - Use thumbnail for grid */}
+                      <div className="cursor-pointer" onClick={() => openPhotoViewer(allImages, 0)}>
                         <img
-                          src={version.stagedImageUrl}
-                          alt={`Version ${idx + 1}`}
+                          src={image.thumbnailUrl || image.dataUrl}
+                          alt="Original"
                           loading="lazy"
                           className="w-full aspect-video object-cover rounded-lg border-2 border-gray-200 hover:border-purple-500 transition-all hover:opacity-80"
                         />
-                        <p className="text-center mt-2 text-sm font-semibold text-gray-900">Version {idx + 1}</p>
+                        <p className="text-center mt-2 text-sm font-semibold text-gray-900">Original</p>
                       </div>
-                    ))}
 
-                    {/* Show "View More" button if there are more than 3 versions */}
-                    {versions.length > 3 && (
-                      <div
-                        className="cursor-pointer flex items-center justify-center bg-gray-100 rounded-lg border-2 border-gray-300 hover:border-purple-500 transition-all aspect-video"
-                        onClick={() => openPhotoViewer(allImages, 4)}
-                      >
-                        <div className="text-center">
-                          <p className="text-2xl font-bold text-gray-600">+{versions.length - 3}</p>
-                          <p className="text-sm text-gray-600 mt-1">more versions</p>
+                      {/* Staged Versions - Show all when expanded */}
+                      {versions.map((version, idx) => (
+                        <div key={idx} className="cursor-pointer" onClick={() => openPhotoViewer(allImages, idx + 1)}>
+                          <img
+                            src={version.stagedImageUrl}
+                            alt={`Version ${idx + 1}`}
+                            loading="lazy"
+                            className="w-full aspect-video object-cover rounded-lg border-2 border-gray-200 hover:border-purple-500 transition-all hover:opacity-80"
+                          />
+                          <p className="text-center mt-2 text-sm font-semibold text-gray-900">Version {idx + 1}</p>
                         </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {isExpanded && (
+                  <div className="p-6 bg-gray-50 border-t border-gray-200">
+                    {canEdit ? (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between text-sm text-gray-900 mb-2">
+                          <span className="font-semibold">Edit Credits Available:</span>
+                          <span className="font-bold text-purple-600">
+                            {MAX_VERSIONS_PER_IMAGE - versions.length} / {MAX_VERSIONS_PER_IMAGE - 1} remaining
+                          </span>
+                        </div>
+                        <Button onClick={() => handleContinueEditing(image.id)} className="w-full bg-purple-600 hover:bg-purple-700" size="lg">
+                          <Edit className="w-4 h-4 mr-2" />
+                          {versions.length === 0 ? 'Start Editing' : 'Continue Editing'}
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="text-center py-3">
+                        <p className="text-amber-600 font-bold">
+                          Maximum {MAX_VERSIONS_PER_IMAGE} versions reached
+                        </p>
+                        <p className="text-sm text-gray-900 font-medium mt-1">
+                          No more edits available for this image
+                        </p>
                       </div>
                     )}
                   </div>
-                </div>
-
-                <div className="p-6 bg-gray-50 border-t border-gray-200">
-                  {canEdit ? (
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between text-sm text-gray-900 mb-2">
-                        <span className="font-semibold">Edit Credits Available:</span>
-                        <span className="font-bold text-purple-600">
-                          {MAX_VERSIONS_PER_IMAGE - versions.length} / {MAX_VERSIONS_PER_IMAGE - 1} remaining
-                        </span>
-                      </div>
-                      <Button onClick={() => handleContinueEditing(image.id)} className="w-full bg-purple-600 hover:bg-purple-700" size="lg">
-                        <Edit className="w-4 h-4 mr-2" />
-                        {versions.length === 0 ? 'Start Editing' : 'Continue Editing'}
-                      </Button>
-                    </div>
-                  ) : (
-                    <div className="text-center py-3">
-                      <p className="text-amber-600 font-bold">
-                        Maximum {MAX_VERSIONS_PER_IMAGE} versions reached
-                      </p>
-                      <p className="text-sm text-gray-900 font-medium mt-1">
-                        No more edits available for this image
-                      </p>
-                    </div>
-                  )}
-                </div>
+                )}
               </div>
             );
           })}
